@@ -26,16 +26,11 @@ const MODULES = [
   { key: "courses", label: "Course Permissions", icon: FiBookOpen },
   { key: "degrees", label: "Degree Permissions", icon: FiLayers },
   { key: "streams", label: "Stream Permissions", icon: FiLayers },
-  {
-    key: "colleges",
-    label: "College Permissions",
-    icon: FiBookOpen,
-  },
-  {
-    key: "specializations",
-    label: "Specialization Permissions",
-    icon: FiBookOpen,
-  },
+  {key: "colleges",label: "College Permissions",icon: FiBookOpen},
+  {key: "universities",label: "university Permissions",icon: FiBookOpen},
+  {key: "specializations",label: "Specialization Permissions",icon: FiBookOpen},
+  {key:"emailTemplates",label:"EmailTemplate Permissions", icon: FiBookOpen},
+  {key:"contacts",label:"Contact Permissions", icon:FiBookOpen}
 ];
 
 const ACTIONS = [

@@ -35,8 +35,10 @@
             "roles",
             "courses",
             "degrees",
+            "universities",
             "streams",
             "specializations",
+            "emailTemplates",
           ];
 
           const allowedActions = [

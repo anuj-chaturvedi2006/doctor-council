@@ -1,301 +1,269 @@
-  
-import React, { useState } from "react";
-import { Outlet, NavLink, useNavigate } from "react-router-dom";
+import React, { useState, useEffect, useMemo } from "react";
+import {
+  Outlet,
+  NavLink,
+  useNavigate,
+  useLocation,
+} from "react-router-dom";
+
 import {
   FiHome,
   FiUsers,
-  FiBarChart2,
-  FiShield,
-  FiLayers, // New icon
-  FiLogOut,
+  FiUser,
+  FiBook,
+  FiBookOpen,
+  FiLayers,
+  FiMail,
+  FiMessageSquare,
+  FiChevronDown,
+  FiChevronRight,
+  FiCalendar,
+  FiFileText,
+  FiClock,
+  FiUserCheck,
   FiMenu,
   FiX,
-  FiBell,
-  FiBookOpen,
-  FiAward,
-
+  FiLogOut,
 } from "react-icons/fi";
+
 const AdminLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const location = useLocation();
   const navigate = useNavigate();
 
-  // Logged-in user details
-  const getUser = () => {
-    try {
-      return JSON.parse(localStorage.getItem("user") || "null");
-    } catch {
-      return null;
+  const [counsellingOpen, setCounsellingOpen] = useState(
+    location.pathname.startsWith("/admin/counselling")
+  );
+
+  // Sync submenu state when route changes
+  useEffect(() => {
+    if (location.pathname.startsWith("/admin/counselling")) {
+      setCounsellingOpen(true);
     }
-  };
+  }, [location.pathname]);
 
-  const user = getUser();
+  // Safe localStorage parsing
+  const user = useMemo(() => {
+    try {
+      return JSON.parse(localStorage.getItem("user") || "{}");
+    } catch {
+      return {};
+    }
+  }, []);
 
-  const adminName = user?.name || "Admin";
-  const adminEmail = user?.email || "";
-  const adminRole =
-    typeof user?.role === "object"
-      ? user?.role?.roleName || "Administrator"
-      : user?.role || "Administrator";
+  const roleName = (
+  user.role?.roleName || user.role || ""
+)
+  .toLowerCase()
+  .replace(/[\s_-]/g, "");
 
-  const avatarLetter = adminName.charAt(0).toUpperCase() || "A";
+const isCounsellor = roleName === "counsellor";
 
-  // Logout
+  // Main Sidebar Menu
+  const menuItems = [
+    { name: "Dashboard", path: "/admin/dashboard", icon: <FiHome /> },
+    { name: "Student", path: "/admin/student", icon: <FiUsers /> },
+    { name: "University", path: "/admin/university", icon: <FiBookOpen /> },
+    { name: "College", path: "/admin/college", icon: <FiBook /> },
+    { name: "Streams", path: "/admin/streams", icon: <FiLayers /> },
+    { name: "Course", path: "/admin/courses", icon: <FiBookOpen /> },
+    { name: "Degree", path: "/admin/degrees", icon: <FiBook /> },
+    { name: "Specialization", path: "/admin/specializations", icon: <FiLayers /> },
+    { name: "Role Management", path: "/admin/role", icon: <FiUser /> },
+    { name: "Email Template", path: "/admin/emailtemplate", icon: <FiMail /> },
+    { name: "Contact", path: "/admin/contact", icon: <FiMessageSquare /> },
+  ];
+
+  const visibleMenuItems = isCounsellor
+  ? []
+  : menuItems;
+
+  // Counselling Submenu
+  const counsellingSubmenu = [
+     {name: "Dashboard", path: "/admin/counselling/dashboard",icon: <FiHome />,},
+    { name: "My Students", path: "/admin/counselling/my-students", icon: <FiUsers /> },
+    { name: "Student Details", path: "/admin/counselling/student-details", icon: <FiUser /> },
+    { name: "Counselling Requests", path: "/admin/counselling/requests", icon: <FiFileText /> },
+    { name: "Appointments", path: "/admin/counselling/appointments", icon: <FiCalendar /> },
+    { name: "Sessions", path: "/admin/counselling/counsellingsessions", icon: <FiClock /> },
+    { name: "Follow-ups", path: "/admin/counselling/follow-ups", icon: <FiMessageSquare /> },
+    { name: "Counsellor Management", path: "/admin/counselling/management", icon: <FiUserCheck /> },
+  ];
+
+  // Dynamic Page Title based on active route
+  const currentPageTitle = useMemo(() => {
+    const allItems = [...menuItems, ...counsellingSubmenu];
+    const activeItem = allItems.find((item) =>
+      location.pathname.startsWith(item.path)
+    );
+    return activeItem ? activeItem.name : "Dashboard";
+  }, [location.pathname]);
+
   const handleLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
-    localStorage.removeItem("email");
-
-    navigate("/login", { replace: true });
+    navigate("/login");
   };
 
-  const menuItems = [
-    {
-      name: "Dashboard",
-      path: "/admin/dashboard",
-      icon: <FiHome />,
-    },
-    {
-      name: "Student",
-      path: "/admin/student",
-      icon: <FiUsers />,
-    },
-    {
-      name: "Role Management",
-      path: "/admin/role",
-      icon: <FiShield />,
-    },
-    {
-      name: "College",
-      path: "/admin/college",
-      icon: <FiBarChart2 />,
-    },
-    {
-  name: "Streams",
-  path: "/admin/streams",
-  icon: <FiLayers />,
-},
-    {
-  name: "Course",
-  path: "/admin/courses",
-  icon: <FiBookOpen />,
-},
-    {
-  name: "Degree",
-  path: "/admin/degrees",
-  icon: <FiLayers  />,
-},
-    {
-  name: "Specialization",
-  path: "/admin/specializations",
-  icon: <FiAward  />,
-},
-  ];
+  const linkClass = ({ isActive }) =>
+    `flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${
+      isActive
+        ? "bg-blue-600 text-white shadow-md"
+        : "text-gray-300 hover:bg-gray-700 hover:text-white"
+    }`;
 
   return (
-    <div className="min-h-screen bg-[#f5f7fb]">
-      {/* MOBILE OVERLAY */}
+    <div className="flex min-h-screen bg-gray-100">
+      {/* Mobile Overlay */}
       {sidebarOpen && (
         <div
+          className="fixed inset-0 z-30 bg-black/50 backdrop-blur-xs lg:hidden"
           onClick={() => setSidebarOpen(false)}
-          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm lg:hidden"
         />
       )}
 
-      {/* SIDEBAR */}
+      {/* Sidebar (Sticky on Desktop, Fixed Drawer on Mobile) */}
       <aside
-        className={`
-          fixed top-0 left-0 z-50
-          flex h-screen w-[270px] flex-col
-          bg-[#111827] text-white shadow-2xl
-          transition-transform duration-300 ease-in-out
-          lg:translate-x-0
-          ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
-        `}
+        className={`fixed left-0 top-0 z-40 flex h-screen w-[270px] shrink-0 flex-col bg-gray-900 text-white transition-transform duration-300 lg:sticky lg:translate-x-0 ${
+          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
       >
-        {/* LOGO */}
-        <div className="px-5 pt-5">
-          <div className="flex h-[70px] items-center justify-between rounded-2xl border border-white/[0.07] bg-white/[0.04] px-4">
-            <div>
-              <h1 className="text-[22px] font-bold">
-                Admin<span className="text-blue-400">Panel</span>
-              </h1>
+        {/* Logo */}
+        <div className="flex h-16 shrink-0 items-center justify-between border-b border-gray-800 px-5">
+          <h1 className="text-xl font-bold tracking-wide text-white">
+            Doctor Council
+          </h1>
 
-              <p className="mt-1 text-[10px] tracking-[1.5px] text-gray-500">
-                MANAGEMENT SYSTEM
-              </p>
-            </div>
-
-            <button
-              onClick={() => setSidebarOpen(false)}
-              aria-label="Close sidebar"
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-white/10 hover:text-white lg:hidden"
-            >
-              <FiX size={18} />
-            </button>
-          </div>
+          <button
+            type="button"
+            aria-label="Close Sidebar"
+            className="rounded-lg p-1 text-xl text-gray-400 hover:bg-gray-800 hover:text-white lg:hidden"
+            onClick={() => setSidebarOpen(false)}
+          >
+            <FiX />
+          </button>
         </div>
 
-        {/* MENU */}
-        <nav className="flex-1 px-5 pt-9">
-          <p className="mb-4 px-3 text-[10px] font-semibold uppercase tracking-[2px] text-gray-500">
+        {/* Sidebar Menu */}
+        <div className="flex-1 overflow-y-auto px-3 py-5">
+          <p className="mb-3 px-3 text-xs font-semibold uppercase tracking-wider text-gray-500">
             Main Menu
           </p>
 
-          <div className="space-y-3">
-            {menuItems.map((item) => (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                end={item.path === "/admin/dashboard"}
-                onClick={() => setSidebarOpen(false)}
-                className={({ isActive }) =>
-                  `flex h-[52px] items-center gap-4 rounded-xl px-4 transition-all duration-200 ${
-                    isActive
-                      ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20"
-                      : "text-gray-400 hover:bg-white/[0.06] hover:text-white"
-                  }`
-                }
-              >
-                <span className="text-[20px]">{item.icon}</span>
-                <span className="text-sm font-medium">{item.name}</span>
-              </NavLink>
-            ))}
-          </div>
-        </nav>
+          <nav className="space-y-1">
+            {/* Normal Menu Items */}
+           {(isCounsellor ? [] : menuItems).map((item) => (
+  <NavLink
+    key={item.path}
+    to={item.path}
+    onClick={() => setSidebarOpen(false)}
+    className={linkClass}
+  >
+    <span className="text-lg">{item.icon}</span>
+    <span className="text-sm font-medium">{item.name}</span>
+  </NavLink>
+))}
 
-        {/* SIDEBAR ADMIN PROFILE */}
-        <div className="px-5 pb-6">
-          <div className="mb-4 h-px bg-white/[0.08]" />
-
-          <div className="flex items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.05] p-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-600 font-semibold text-white">
-              {avatarLetter}
-            </div>
-
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-white">
-                {adminName}
-              </p>
-
-              <p className="mt-1 truncate text-[11px] text-gray-400">
-                {adminRole}
-              </p>
-            </div>
-
+            {/* Counselling Parent Menu */}
             <button
-              onClick={handleLogout}
-              title="Logout"
-              aria-label="Logout"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gray-400 transition hover:bg-red-400/10 hover:text-red-400"
+              type="button"
+              onClick={() => setCounsellingOpen((prev) => !prev)}
+              className={`flex w-full items-center justify-between rounded-lg px-4 py-3 transition-all duration-200 ${
+                location.pathname.startsWith("/admin/counselling")
+                  ? "bg-gray-800 text-white"
+                  : "text-gray-300 hover:bg-gray-700 hover:text-white"
+              }`}
             >
-              <FiLogOut size={17} />
+              <span className="flex items-center gap-3">
+                <FiUsers className="text-lg" />
+                <span className="text-sm font-medium">Counselling</span>
+              </span>
+
+              {counsellingOpen ? <FiChevronDown /> : <FiChevronRight />}
             </button>
-          </div>
+
+            {/* Counselling Submenu */}
+            {counsellingOpen && (
+              <div className="ml-4 space-y-1 border-l border-gray-700 pl-3 pt-1">
+                {counsellingSubmenu.map((item) => (
+                  <NavLink
+                    key={item.path}
+                    to={item.path}
+                    onClick={() => setSidebarOpen(false)}
+                    className={({ isActive }) =>
+                      `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-all duration-200 ${
+                        isActive
+                          ? "bg-blue-600 text-white shadow-sm"
+                          : "text-gray-400 hover:bg-gray-700 hover:text-white"
+                      }`
+                    }
+                  >
+                    <span className="text-base">{item.icon}</span>
+                    <span>{item.name}</span>
+                  </NavLink>
+                ))}
+              </div>
+            )}
+          </nav>
+        </div>
+
+        {/* Logout */}
+        <div className="shrink-0 border-t border-gray-800 p-4">
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-gray-300 transition hover:bg-red-600 hover:text-white"
+          >
+            <FiLogOut className="text-lg" />
+            <span className="text-sm font-medium">Logout</span>
+          </button>
         </div>
       </aside>
 
-      {/* MAIN CONTENT */}
-      <div className="flex min-h-screen flex-col lg:ml-[270px]">
-        {/* NAVBAR */}
-        <header className="sticky top-0 z-30 flex h-[78px] items-center justify-between border-b border-gray-200 bg-white px-5 sm:px-8 lg:px-10">
-          {/* LEFT */}
-          <div className="flex items-center gap-4">
+      {/* Main Content Area */}
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* Sticky Navbar */}
+        <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between border-b bg-white px-5 shadow-xs">
+          <div className="flex items-center gap-3">
             <button
+              type="button"
+              aria-label="Open Sidebar"
+              className="rounded-lg p-1.5 text-2xl text-gray-700 hover:bg-gray-100 lg:hidden"
               onClick={() => setSidebarOpen(true)}
-              aria-label="Open sidebar"
-              className="flex h-10 w-10 items-center justify-center rounded-xl bg-gray-100 text-gray-600 hover:bg-blue-50 hover:text-blue-600 lg:hidden"
             >
-              <FiMenu size={21} />
+              <FiMenu />
             </button>
 
-            <div>
-              <p className="text-[11px] text-gray-400">
-                Welcome back 👋
-              </p>
-
-              <h2 className="text-lg font-semibold text-gray-800 sm:text-xl">
-                Admin Dashboard
-              </h2>
-            </div>
+            <h2 className="text-lg font-semibold text-gray-800">
+              {currentPageTitle}
+            </h2>
           </div>
 
-          {/* RIGHT */}
-          <div className="flex items-center gap-4 sm:gap-6">
-            {/* Notification */}
-            <button
-              aria-label="Notifications"
-              className="relative flex h-10 w-10 items-center justify-center rounded-xl text-gray-500 transition hover:bg-gray-100 hover:text-blue-600"
-            >
-              <FiBell size={20} />
+          <div className="flex items-center gap-3">
+            <div className="text-right">
+              <p className="text-sm font-semibold text-gray-800">
+                {user.name || "User"}
+              </p>
+              <p className="text-xs text-gray-500">
+                {user.role?.roleName || user.role || "Account"}
+              </p>
+            </div>
 
-              <span className="absolute right-2 top-2 h-[7px] w-[7px] rounded-full bg-red-500 ring-2 ring-white" />
-            </button>
-
-            <div className="hidden h-8 w-px bg-gray-200 sm:block" />
-
-            {/* NAVBAR PROFILE */}
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-blue-100 bg-blue-50 font-semibold text-blue-600">
-                {avatarLetter}
-              </div>
-
-              <div className="hidden sm:block">
-                <p className="max-w-[180px] truncate text-sm font-semibold text-gray-700">
-                  {adminName}
-                </p>
-
-                <p className="mt-1 max-w-[180px] truncate text-[11px] text-gray-400">
-                  {adminEmail || adminRole}
-                </p>
-              </div>
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-600 font-semibold text-white">
+              {(user.name || "U").charAt(0).toUpperCase()}
             </div>
           </div>
         </header>
 
-        {/* PAGE CONTENT */}
-        <main className="flex-1 px-4 py-6 sm:px-7 sm:py-8 lg:px-10 lg:py-10">
-          <div className="mx-auto w-full max-w-[1600px]">
-            <Outlet />
-          </div>
+        {/* Page Content */}
+        <main className="flex-1 overflow-x-hidden p-5 md:p-6">
+          <Outlet />
         </main>
 
-        {/* FOOTER */}
-        <footer className="border-t border-gray-200 bg-white">
-          <div className="flex flex-col items-center justify-between gap-3 px-5 py-5 sm:flex-row sm:px-8 lg:px-10">
-            <p className="text-center text-xs text-gray-400 sm:text-left sm:text-sm">
-              © {new Date().getFullYear()}{" "}
-              <span className="font-semibold text-gray-600">
-                AdminPanel
-              </span>
-              . All rights reserved.
-            </p>
-
-            <div className="flex gap-5">
-              <a
-                href="#"
-                onClick={(e) => e.preventDefault()}
-                className="text-xs text-gray-400 hover:text-blue-600 sm:text-sm"
-              >
-                Privacy
-              </a>
-
-              <a
-                href="#"
-                onClick={(e) => e.preventDefault()}
-                className="text-xs text-gray-400 hover:text-blue-600 sm:text-sm"
-              >
-                Terms
-              </a>
-
-              <a
-                href="#"
-                onClick={(e) => e.preventDefault()}
-                className="text-xs text-gray-400 hover:text-blue-600 sm:text-sm"
-              >
-                Support
-              </a>
-            </div>
-          </div>
+        {/* Footer */}
+        <footer className="border-t bg-white px-5 py-4 text-center text-sm text-gray-500">
+          © {new Date().getFullYear()} Doctor Council. All Rights Reserved.
         </footer>
       </div>
     </div>

@@ -1,0 +1,535 @@
+
+"use client";
+
+import React, { useEffect, useState } from "react";
+import axios from "axios";
+import {
+  FiBookOpen,
+  FiSearch,
+  FiRefreshCw,
+  FiClock,
+  FiAward,
+  FiLayers,
+  FiX,
+} from "react-icons/fi";
+
+const API = "http://localhost:2002";
+
+interface Course {
+  _id: string;
+  name: string;
+  slug?: string;
+  code?: string;
+  description?: string;
+  stream?: string | { name?: string };
+  degree?: string | { name?: string };
+  duration?: {
+    value?: number;
+    unit?: string;
+  };
+  eligibility?: {
+    minimumPercentage?: number;
+    requiredSubjects?: string[];
+    requiredQualification?: string;
+  };
+  entranceExams?: string[];
+  status?: string;
+}
+
+export default function Student() {
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
+  const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
+
+  // Fetch Courses
+ 
+const fetchCourses = async () => {
+  try {
+    setLoading(true);
+    setError("");
+
+    const response = await axios.get(
+      `${API}/get-course`
+    );
+
+    if (response.data.success) {
+      setCourses(response.data.courses || []);
+    } else {
+      setCourses([]);
+      setError("Courses fetch nahi ho paye.");
+    }
+  } catch (err: unknown) {
+    console.error("Fetch courses error:", err);
+
+    if (axios.isAxiosError(err)) {
+      setError(
+        err.response?.data?.message ||
+          "Server se connect nahi ho pa raha hai."
+      );
+    } else {
+      setError("Something went wrong.");
+    }
+  } finally {
+    setLoading(false);
+  }
+};
+
+
+  useEffect(() => {
+    fetchCourses();
+  }, []);
+
+  // Handle populated or non-populated stream/degree
+  const getRelationName = (
+    value?: string | { name?: string }
+  ): string => {
+    if (!value) return "Not specified";
+
+    if (typeof value === "object") {
+      return value.name || "Not specified";
+    }
+
+    return value;
+  };
+
+  // Search Courses
+  const filteredCourses = courses.filter((course) => {
+    const searchText = search.trim().toLowerCase();
+
+    return (
+      course.name?.toLowerCase().includes(searchText) ||
+      course.code?.toLowerCase().includes(searchText) ||
+      getRelationName(course.stream).toLowerCase().includes(searchText) ||
+      getRelationName(course.degree).toLowerCase().includes(searchText)
+    );
+  });
+
+  return (
+    <main className="min-h-screen bg-slate-50 px-4 py-10 sm:px-6 lg:px-10">
+      <div className="mx-auto max-w-7xl">
+
+        {/* Page Header */}
+        <div className="mb-8 flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="mb-2 text-sm font-bold uppercase tracking-widest text-teal-600">
+              Explore Programs
+            </p>
+
+            <h1 className="text-3xl font-extrabold text-slate-900 sm:text-4xl">
+              Explore Our Courses
+            </h1>
+
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500 sm:text-base">
+              Discover the right course for your future. Explore programs,
+              eligibility requirements and course details.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={fetchCourses}
+            disabled={loading}
+            className="flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-5 py-3 font-semibold text-white shadow-lg shadow-teal-600/20 transition hover:bg-teal-700 disabled:opacity-60"
+          >
+            <FiRefreshCw className={loading ? "animate-spin" : ""} />
+            Refresh Courses
+          </button>
+        </div>
+
+        {/* Search and Count */}
+        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative w-full sm:max-w-md">
+            <FiSearch
+              className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+              size={19}
+            />
+
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search course, code, stream or degree..."
+              className="w-full rounded-xl border border-slate-200 bg-white py-3.5 pl-12 pr-4 text-sm text-slate-700 outline-none transition focus:border-teal-500 focus:ring-4 focus:ring-teal-50"
+            />
+          </div>
+
+          <p className="text-sm font-medium text-slate-600">
+            Total Courses:{" "}
+            <span className="font-bold text-teal-700">
+              {filteredCourses.length}
+            </span>
+          </p>
+        </div>
+
+        {/* Loading */}
+        {loading && (
+          <div className="rounded-2xl bg-white py-20 text-center shadow-sm">
+            <FiRefreshCw
+              className="mx-auto mb-4 animate-spin text-teal-600"
+              size={35}
+            />
+            <p className="font-medium text-slate-600">
+              Loading courses...
+            </p>
+          </div>
+        )}
+
+        {/* Error */}
+        {!loading && error && (
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-8 text-center">
+            <p className="mb-4 text-red-600">{error}</p>
+
+            <button
+              onClick={fetchCourses}
+              className="rounded-lg bg-red-600 px-5 py-2.5 font-semibold text-white hover:bg-red-700"
+            >
+              Try Again
+            </button>
+          </div>
+        )}
+
+        {/* Empty */}
+        {!loading && !error && filteredCourses.length === 0 && (
+          <div className="rounded-2xl border border-slate-200 bg-white px-5 py-16 text-center">
+            <FiBookOpen size={45} className="mx-auto mb-4 text-slate-300" />
+
+            <h2 className="text-xl font-bold text-slate-800">
+              {courses.length === 0
+                ? "No Courses Available"
+                : "No Matching Courses"}
+            </h2>
+
+            <p className="mt-2 text-sm text-slate-500">
+              {courses.length === 0
+                ? "Courses will appear here when available."
+                : "Try searching with another course name or code."}
+            </p>
+          </div>
+        )}
+
+        {/* Course Cards */}
+        {!loading && !error && filteredCourses.length > 0 && (
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+            {filteredCourses.map((course) => (
+              <div
+                key={course._id}
+                className="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-xl"
+              >
+                {/* Card Top */}
+                <div className="relative overflow-hidden bg-gradient-to-br from-teal-600 via-cyan-600 to-blue-700 p-6 text-white">
+                  <div className="absolute -right-8 -top-8 h-36 w-36 rounded-full bg-white/10" />
+                  <div className="absolute -bottom-12 right-20 h-32 w-32 rounded-full bg-white/10" />
+
+                  <div className="relative z-10 flex items-start justify-between gap-3">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/20">
+                      <FiBookOpen size={25} />
+                    </div>
+
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs font-bold ${
+                        course.status?.toLowerCase() === "active"
+                          ? "bg-emerald-100 text-emerald-700"
+                          : "bg-white/20 text-white"
+                      }`}
+                    >
+                      {course.status || "Available"}
+                    </span>
+                  </div>
+
+                  <h2 className="relative z-10 mt-6 text-2xl font-bold">
+                    {course.name}
+                  </h2>
+
+                  <p className="relative z-10 mt-2 text-sm text-white/80">
+                    {course.code
+                      ? `Course Code: ${course.code}`
+                      : "Professional Course"}
+                  </p>
+                </div>
+
+                {/* Card Body */}
+                <div className="p-6">
+                  <p className="min-h-[48px] text-sm leading-6 text-slate-500">
+                    {course.description ||
+                      "Explore this course and learn more about its eligibility and program details."}
+                  </p>
+
+                  {/* Stream and Degree */}
+                  <div className="mt-5 space-y-3">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-teal-50 text-teal-600">
+                        <FiLayers size={18} />
+                      </div>
+
+                      <div>
+                        <p className="text-xs text-slate-400">Stream</p>
+                        <p className="text-sm font-semibold text-slate-700">
+                          {getRelationName(course.stream)}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+                        <FiAward size={18} />
+                      </div>
+
+                      <div>
+                        <p className="text-xs text-slate-400">Degree</p>
+                        <p className="text-sm font-semibold text-slate-700">
+                          {getRelationName(course.degree)}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-orange-50 text-orange-600">
+                        <FiClock size={18} />
+                      </div>
+
+                      <div>
+                        <p className="text-xs text-slate-400">Duration</p>
+                        <p className="text-sm font-semibold text-slate-700">
+                          {course.duration?.value
+                            ? `${course.duration.value} ${course.duration.unit || ""}`
+                            : "Not specified"}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Eligibility */}
+                  <div className="mt-5 rounded-xl bg-slate-50 p-4">
+                    <h3 className="mb-2 text-sm font-bold text-slate-800">
+                      Eligibility
+                    </h3>
+
+                    <p className="text-sm text-slate-600">
+                      {course.eligibility?.requiredQualification ||
+                        "Qualification not specified"}
+                    </p>
+
+                    {course.eligibility?.minimumPercentage !== undefined && (
+                      <p className="mt-1 text-xs text-slate-500">
+                        Minimum Percentage:{" "}
+                        <span className="font-bold text-teal-700">
+                          {course.eligibility.minimumPercentage}%
+                        </span>
+                      </p>
+                    )}
+
+                    {course.eligibility?.requiredSubjects &&
+                      course.eligibility.requiredSubjects.length > 0 && (
+                        <p className="mt-2 text-xs text-slate-500">
+                          Subjects:{" "}
+                          {course.eligibility.requiredSubjects.join(", ")}
+                        </p>
+                      )}
+                  </div>
+
+                  {/* Entrance Exams */}
+                  {course.entranceExams && course.entranceExams.length > 0 && (
+                    <div className="mt-4">
+                      <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-400">
+                        Entrance Exams
+                      </p>
+
+                      <div className="flex flex-wrap gap-2">
+                        {course.entranceExams.map((exam, index) => (
+                          <span
+                            key={index}
+                            className="rounded-lg bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-700"
+                          >
+                            {exam}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Footer */}
+                  <div className="mt-6 border-t border-slate-100 pt-4">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCourse(course)}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-3 font-semibold text-white transition hover:bg-teal-700"
+                    >
+                      Explore Course
+                      <FiBookOpen />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ================================== */}
+      {/* Course Details Popup */}
+      {/* ================================== */}
+
+      {selectedCourse && (
+        <div
+          onClick={() => setSelectedCourse(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl"
+          >
+            {/* Popup Header */}
+            <div className="sticky top-0 z-10 flex items-center justify-between bg-gradient-to-r from-teal-600 to-blue-700 px-6 py-5 text-white">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-widest text-white/70">
+                  Course Details
+                </p>
+
+                <h2 className="mt-1 text-2xl font-bold">
+                  {selectedCourse.name}
+                </h2>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSelectedCourse(null)}
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-white/20 transition hover:bg-white/30"
+                aria-label="Close popup"
+              >
+                <FiX size={22} />
+              </button>
+            </div>
+
+            {/* Popup Body */}
+            <div className="space-y-6 p-6">
+              <div>
+                <p className="text-sm leading-6 text-slate-600">
+                  {selectedCourse.description || "No description available."}
+                </p>
+
+                <span
+                  className={`mt-3 inline-block rounded-full px-3 py-1 text-xs font-bold ${
+                    selectedCourse.status?.toLowerCase() === "active"
+                      ? "bg-emerald-100 text-emerald-700"
+                      : "bg-slate-100 text-slate-600"
+                  }`}
+                >
+                  {selectedCourse.status || "Available"}
+                </span>
+              </div>
+
+              {/* Course Information */}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="rounded-xl bg-slate-50 p-4">
+                  <p className="text-xs text-slate-400">Course Code</p>
+                  <p className="mt-1 font-bold text-slate-800">
+                    {selectedCourse.code || "Not specified"}
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-slate-50 p-4">
+                  <p className="text-xs text-slate-400">Duration</p>
+                  <p className="mt-1 font-bold text-slate-800">
+                    {selectedCourse.duration?.value
+                      ? `${selectedCourse.duration.value} ${selectedCourse.duration.unit || ""}`
+                      : "Not specified"}
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-slate-50 p-4">
+                  <p className="text-xs text-slate-400">Stream</p>
+                  <p className="mt-1 font-bold text-slate-800">
+                    {getRelationName(selectedCourse.stream)}
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-slate-50 p-4">
+                  <p className="text-xs text-slate-400">Degree</p>
+                  <p className="mt-1 font-bold text-slate-800">
+                    {getRelationName(selectedCourse.degree)}
+                  </p>
+                </div>
+              </div>
+
+              {/* Eligibility */}
+              <div className="rounded-xl border border-slate-200 p-5">
+                <h3 className="mb-4 text-lg font-bold text-slate-800">
+                  Eligibility Requirements
+                </h3>
+
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-xs text-slate-400">
+                      Required Qualification
+                    </p>
+                    <p className="font-semibold text-slate-700">
+                      {selectedCourse.eligibility?.requiredQualification ||
+                        "Not specified"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs text-slate-400">
+                      Minimum Percentage
+                    </p>
+                    <p className="font-semibold text-slate-700">
+                      {selectedCourse.eligibility?.minimumPercentage !== undefined
+                        ? `${selectedCourse.eligibility.minimumPercentage}%`
+                        : "Not specified"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs text-slate-400">
+                      Required Subjects
+                    </p>
+                    <p className="font-semibold text-slate-700">
+                      {selectedCourse.eligibility?.requiredSubjects?.join(", ") ||
+                        "Not specified"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Entrance Exams */}
+              <div>
+                <h3 className="mb-3 text-lg font-bold text-slate-800">
+                  Entrance Exams
+                </h3>
+
+                {selectedCourse.entranceExams &&
+                selectedCourse.entranceExams.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {selectedCourse.entranceExams.map((exam, index) => (
+                      <span
+                        key={index}
+                        className="rounded-lg bg-teal-50 px-3 py-2 text-sm font-semibold text-teal-700"
+                      >
+                        {exam}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-500">
+                    No entrance exam specified.
+                  </p>
+                )}
+              </div>
+
+              {/* Close Button */}
+              <button
+                type="button"
+                onClick={() => setSelectedCourse(null)}
+                className="w-full rounded-xl bg-slate-900 px-5 py-3 font-semibold text-white transition hover:bg-slate-800"
+              >
+                Close Details
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </main>
+  );
+}

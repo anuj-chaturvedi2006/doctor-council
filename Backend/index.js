@@ -6,7 +6,13 @@ const bcrypt = require("bcrypt");
 const nodemailer = require("nodemailer");
 const otpgenerator = require("otp-generator");
 const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
 const app = express();
+const multer = require("multer");
+const path = require("path");
+const fs = require("fs");
+const XLSX = require("xlsx");
+const razorpay = require("./middleware/rozarpay");
 const port = 2002;
 const verifyToken = require("./middleware/auth");
 const checkPermission = require("./middleware/permission");
@@ -14,11 +20,31 @@ const requireRoleFactory = require("./middleware/requireRole");
 const Stream = require("./Stream");
 const Degree = require("./Degree");
 const Course = require("./Course");
+const College =require("./College")
+const University=require("./university")
 const Specialization = require("./Specialization");
+const EmailTemplate=require("./EmailTemplate")
+const sanitizeHtml = require("sanitize-html");
+const StudentProfile = require("./StudentProfile");
+const Package=require("./Package")
+const StudentPackage=require("./StudentPackage")
+const Appointment = require("./models/Appointment");
+const CounsellingSession = require("./models/CounsellingSession");
+const SessionFeedback = require("./models/SessionFeedback");
+const FollowUp = require("./models/FollowUp");
+
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+const uploadDir = path.join(__dirname, "uploads", "profile");
 
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+app.use("/uploads",
+  express.static(path.join(__dirname, "uploads"))
+);
 // ================= MAILER =================
 
 const mailer = nodemailer.createTransport({
@@ -36,43 +62,45 @@ mongoose
   .then(() => console.log("database connected"))
   .catch((error) => console.log("database is not connect", error));
 
-// ================= OTP SCHEMA =================
-
-const otpSchema = mongoose.Schema({
-  email: {
-    type: String,
-    unique: true,
-  },
-
-  otp: String,
-
-  verified: {
-    type: Boolean,
-    default: false,
-  },
-
-  expiresAt: Date,
-});
 
 // ================= OLD USER SCHEMA =================
 
-const userSchema = mongoose.Schema({
-  name: String,
 
-  email: {
-    type: String,
-    unique: true,
+
+const contactSchema = new mongoose.Schema(
+  {
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+      trim: true,
+    },
+    contact: {
+      type: String,
+      required: true,
+    },
+    subject: {
+      type: String,
+      required: true,
+    },
+    enquiryType: {
+      type: String,
+      required: true,
+    },
+    message: {
+      type: String,
+      required: true,
+    },
   },
+  { timestamps: true }
+);
 
-  password: String,
-
-  gender: {
-    type: String,
-    enum: ["male", "female", "other"],
-  },
-
-  address: String,
-});
 
 // ================= ROLE SCHEMA =================
 
@@ -102,6 +130,12 @@ const modulePermissions = {
     update: { type: Boolean, default: false },
     delete: { type: Boolean, default: false },
   },
+  universities: {
+    create: { type: Boolean, default: false },
+    view: { type: Boolean, default: true },
+    update: { type: Boolean, default: false },
+    delete: { type: Boolean, default: false },
+  },
   streams: {
     create: { type: Boolean, default: false },
     view: { type: Boolean, default: true },
@@ -114,243 +148,633 @@ const modulePermissions = {
     update: { type: Boolean, default: false },
     delete: { type: Boolean, default: false },
   },
-};
-
-const roleSchema = new mongoose.Schema(
-  {
-    roleName: {
-      type: String,
-      required: true,
-      unique: true,
-      trim: true,
-    },
-
-    status: {
-      type: String,
-      enum: ["active", "inactive"],
-      default: "active",
-    },
-
-    permissions: {
-      type: mongoose.Schema.Types.Mixed,
-      default: () => ({
-        students: {
-          create: false,
-          view: true,
-          update: false,
-          delete: false,
-        },
-        roles: {
-          create: false,
-          view: true,
-          update: false,
-          delete: false,
-        },
-        courses: {
-          create: false,
-          view: true,
-          update: false,
-          delete: false,
-        },
-        degrees: {
-          create: false,
-          view: true,
-          update: false,
-          delete: false,
-        },
-        streams: {
-          create: false,
-          view: true,
-          update: false,
-          delete: false,
-        },
-        specializations: {
-          create: false,
-          view: true,
-          update: false,
-          delete: false,
-        },
-      }),
-    },
+   emailTemplate : {
+    create: { type: Boolean, default: false },
+    view: { type: Boolean, default: true },
+    update: { type: Boolean, default: false },
+    delete: { type: Boolean, default: false },
   },
-  {
-    timestamps: true,
-  }
-);
+};
 
 
 // ================= ADMIN USER SCHEMA =================
 
-const userSchema1 = mongoose.Schema(
-  {
-    name: {
-      type: String,
-      required: true,
-    },
+//================= MODELS =================
 
-    email: {
-      type: String,
-      required: true,
-      unique: true,
-    },
+const Otp = require("./Otp")
+const Contact=mongoose.model("Contact",contactSchema)
+const Role = require("./Role")
 
-    phone: {
-      type: String,
-      trim: true,
-    },
-
-    password: {
-      type: String,
-      required: true,
-    },
-
-    role: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Role",
-      required: true,
-    },
-
-    isEmailVerified: {
-      type: Boolean,
-      default: false,
-    },
-
-    isPhoneVerified: {
-      type: Boolean,
-      default: false,
-    },
-
-    status: {
-      type: String,
-      enum: ["active", "inactive", "blocked"],
-      default: "active",
-    },
-
-    lastLogin: {
-      type: Date,
-      default: null,
-    },
-  },
-  {
-    timestamps: true,
-  },
-);
-
-const collegeSchema = new mongoose.Schema(
-  {
-    name: {
-      type: String,
-      required: true,
-      index: true,
-    },
-
-    slug: {
-      type: String,
-      unique: true,
-    },
-
-    logo: String,
-
-    description: String,
-
-    university: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "University",
-    },
-
-    collegeType: {
-      type: String,
-      enum: ["government", "private", "deemed", "autonomous", "public"],
-    },
-
-    ownership: String,
-
-    establishedYear: Number,
-
-    location: {
-      address: String,
-      city: String,
-      state: String,
-      country: String,
-      pincode: String,
-
-      coordinates: {
-        latitude: Number,
-        longitude: Number,
-      },
-    },
-
-    website: String,
-
-    contact: {
-      email: String,
-      phone: String,
-    },
-
-    accreditation: [
-      {
-        name: String,
-        grade: String,
-        year: Number,
-      },
-    ],
-
-    ranking: [
-      {
-        organization: String,
-        rank: Number,
-        year: Number,
-      },
-    ],
-
-    rating: {
-      average: {
-        type: Number,
-        default: 0,
-      },
-
-      count: {
-        type: Number,
-        default: 0,
-      },
-    },
-
-    facilities: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Facility",
-      },
-    ],
-
-    isVerified: {
-      type: Boolean,
-      default: false,
-    },
-
-    status: {
-      type: String,
-      enum: ["active", "inactive", "pending"],
-      default: "pending",
-    },
-  },
-  {
-    timestamps: true,
-  },
-);
-
-const College = mongoose.model("College", collegeSchema);
-
-// ================= MODELS =================
-
-const User = mongoose.model("User", userSchema);
-
-const Otp = mongoose.model("Otp", otpSchema);
-
-const Role = mongoose.model("Role", roleSchema);
-
-const User1 = mongoose.model("User1", userSchema1);
+const CounsellingAssignment = require("./models/CounsellingAssignment");
+const User1 = require("./User1")
+const CounsellingRequest = require("./models/CounsellingRequest");
 const requirePermission = checkPermission(User1);
 const requireRole = requireRoleFactory(User1);
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 5 * 1024 * 1024, // Maximum 5 MB
+  },
+  fileFilter: (req, file, cb) => {
+    if (/\.xlsx$/i.test(file.originalname)) {
+      return cb(null, true);
+    }
+
+    cb(new Error("Only .xlsx Excel files are allowed"));
+  },
+});
+
+const profileUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => {
+      cb(null, uploadDir);
+    },
+
+    filename: (req, file, cb) => {
+      const uniqueName =
+        Date.now() +
+        "-" +
+        Math.round(Math.random() * 1e9) +
+        path.extname(file.originalname).toLowerCase();
+
+      cb(null, uniqueName);
+    },
+  }),
+
+  limits: {
+    fileSize: 2 * 1024 * 1024,
+  },
+
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+    ];
+
+    if (allowedTypes.includes(file.mimetype)) {
+      return cb(null, true);
+    }
+
+    cb(new Error("Only JPG, PNG and WEBP images are allowed"));
+  },
+});
+
+//rozarpay testing ----------------------//
+
+
+app.post("/create-package", async (req, res) => {
+  try {
+    const {
+      name,
+      price,
+      durationDays,
+      description,
+      features,
+    } = req.body;
+
+    if (!name || !price || !durationDays) {
+      return res.status(400).json({
+        success: false,
+        message: "Name, price and duration are required",
+      });
+    }
+
+    const newPackage = await Package.create({
+      name,
+      price,
+      durationDays,
+      description,
+      features,
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "Package created successfully",
+      data: newPackage,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
+
+app.get("/get-packages", async (req, res) => {
+  try {
+    const packages = await Package.find({
+      status: "active",
+    }).sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      count: packages.length,
+      data: packages,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
+
+
+app.get("/get-package/:id", async (req, res) => {
+  try {
+    const packageData = await Package.findById(req.params.id);
+
+    if (!packageData) {
+      return res.status(404).json({
+        success: false,
+        message: "Package not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: packageData,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
+
+
+app.put("/update-package/:id", async (req, res) => {
+  try {
+    const updatedPackage = await Package.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      {
+        new: true,
+        runValidators: true,
+      }
+    );
+
+    if (!updatedPackage) {
+      return res.status(404).json({
+        success: false,
+        message: "Package not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Package updated successfully",
+      data: updatedPackage,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
+
+
+app.delete("/delete-package/:id", async (req, res) => {
+  try {
+    const packageData = await Package.findById(req.params.id);
+
+    if (!packageData) {
+      return res.status(404).json({
+        success: false,
+        message: "Package not found",
+      });
+    }
+
+    const purchased = await StudentPackage.exists({
+      package: packageData._id,
+    });
+
+    if (purchased) {
+      packageData.status = "inactive";
+      await packageData.save();
+
+      return res.status(200).json({
+        success: true,
+        message: "Package deactivated because purchase history exists",
+      });
+    }
+
+    await Package.findByIdAndDelete(req.params.id);
+
+    return res.status(200).json({
+      success: true,
+      message: "Package deleted successfully",
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
+
+
+app.post("/student/create-package-order", verifyToken, async (req, res) => {
+  try {
+    const { packageId } = req.body;
+
+    if (!packageId) {
+      return res.status(400).json({
+        success: false,
+        message: "Package ID is required",
+      });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(packageId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid package ID",
+      });
+    }
+
+    if (
+      !process.env.RAZORPAY_KEY_ID ||
+      !process.env.RAZORPAY_KEY_SECRET
+    ) {
+      return res.status(500).json({
+        success: false,
+        message: "Razorpay keys are not configured",
+      });
+    }
+
+    // 1. Get package from database
+    const packageData = await Package.findOne({
+      _id: packageId,
+      status: "active",
+    });
+
+    if (!packageData) {
+      return res.status(404).json({
+        success: false,
+        message: "Package not found or inactive",
+      });
+    }
+
+    // 2. Convert rupees into paise
+    const amountPaise = Math.round(
+      Number(packageData.price) * 100
+    );
+
+    if (!Number.isSafeInteger(amountPaise) || amountPaise <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid package price",
+      });
+    }
+
+    // 3. Create Razorpay order
+    const order = await razorpay.orders.create({
+      amount: amountPaise,
+      currency: "INR",
+      receipt: `pkg_${Date.now()}`,
+      notes: {
+        packageId: packageData._id.toString(),
+        studentId: req.userId.toString(),
+      },
+    });
+
+    // 4. Save pending purchase in MongoDB
+    const studentPackage = await StudentPackage.create({
+      student: req.userId,
+      package: packageData._id,
+      packageName: packageData.name,
+      amountPaise,
+      currency: "INR",
+      razorpayOrderId: order.id,
+      paymentStatus: "pending",
+      packageStatus: "inactive",
+    });
+
+    // 5. Send order details to frontend
+    return res.status(201).json({
+      success: true,
+      message: "Package order created successfully",
+      data: {
+        studentPackageId: studentPackage._id,
+        orderId: order.id,
+        amount: order.amount,
+        currency: order.currency,
+        packageName: packageData.name,
+        key: process.env.RAZORPAY_KEY_ID,
+      },
+    });
+
+  } catch (error) {
+    console.error("Create package order error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
+
+app.post("/verify-payment", verifyToken, async (req, res) => {
+  try {
+    const {
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+    } = req.body;
+
+    // 1. Required fields check
+    if (
+      !razorpay_order_id ||
+      !razorpay_payment_id ||
+      !razorpay_signature
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Payment details are required",
+      });
+    }
+
+console.log("Received Order ID:", razorpay_order_id);
+console.log("Logged In Student ID:", req.userId);
+
+const orderCheck = await StudentPackage.findOne({
+  razorpayOrderId: razorpay_order_id,
+});
+
+console.log("Order Found:", orderCheck);
+console.log("Order Student ID:", orderCheck?.student?.toString());
+
+    // 2. Find this order for the logged-in student
+    const studentPackage = await StudentPackage.findOne({
+      razorpayOrderId: razorpay_order_id,
+      student: req.userId,
+    }).populate("package");
+
+    if (!studentPackage) {
+      return res.status(404).json({
+        success: false,
+        message: "Package order not found",
+      });
+    }
+
+    // 3. Already-paid order check (idempotency)
+    if (studentPackage.paymentStatus === "paid") {
+      if (studentPackage.razorpayPaymentId === razorpay_payment_id) {
+        return res.status(200).json({
+          success: true,
+          message: "Payment already verified",
+          data: studentPackage,
+        });
+      }
+
+      return res.status(409).json({
+        success: false,
+        message: "This order has already been paid",
+      });
+    }
+
+    // 4. Generate expected Razorpay signature
+    const generatedSignature = crypto
+      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+      .digest("hex");
+
+    // 5. Compare signatures safely
+    const generatedBuffer = Buffer.from(generatedSignature, "hex");
+    const receivedBuffer = Buffer.from(razorpay_signature, "hex");
+
+    if (
+      generatedBuffer.length !== receivedBuffer.length ||
+      !crypto.timingSafeEqual(generatedBuffer, receivedBuffer)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid payment signature",
+      });
+    }
+
+    // 6. Verify payment directly with Razorpay
+    const payment = await razorpay.payments.fetch(
+      razorpay_payment_id
+    );
+
+    if (payment.order_id !== razorpay_order_id) {
+      return res.status(400).json({
+        success: false,
+        message: "Payment order ID does not match",
+      });
+    }
+
+    if (payment.status !== "captured") {
+      return res.status(400).json({
+        success: false,
+        message: `Payment is not captured. Current status: ${payment.status}`,
+      });
+    }
+
+    // 7. Verify amount and currency
+    if (
+      payment.amount !== studentPackage.amountPaise ||
+      payment.currency !== studentPackage.currency
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Payment amount or currency does not match",
+      });
+    }
+
+    // 8. Get package duration
+    const packageData = studentPackage.package;
+
+    if (!packageData) {
+      return res.status(404).json({
+        success: false,
+        message: "Package details not found",
+      });
+    }
+
+    const durationDays = Number(packageData.durationDays);
+
+    if (!Number.isFinite(durationDays) || durationDays <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid package duration",
+      });
+    }
+
+    // 9. Activate package
+    const startDate = new Date();
+    const expiryDate = new Date(startDate);
+
+    expiryDate.setDate(expiryDate.getDate() + durationDays);
+
+    studentPackage.razorpayPaymentId = razorpay_payment_id;
+    studentPackage.razorpaySignature = razorpay_signature;
+    studentPackage.paymentStatus = "paid";
+    studentPackage.packageStatus = "active";
+    studentPackage.startDate = startDate;
+    studentPackage.expiryDate = expiryDate;
+
+    await studentPackage.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Payment verified and package activated successfully",
+      data: studentPackage,
+    });
+
+  } catch (error) {
+    console.error("Verify payment error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
+
+// Get logged-in student's packages
+5
+app.get("/student/my-package", verifyToken, async (req, res) => {
+  try {
+    const studentId = req.userId;
+    const currentDate = new Date();
+
+    // Automatically expire packages whose validity has ended
+    await StudentPackage.updateMany(
+      {
+        student: studentId,
+        packageStatus: "active",
+        expiryDate: { $lte: currentDate },
+      },
+      {
+        $set: {
+          packageStatus: "expired",
+        },
+      }
+    );
+
+    // Get student's purchased packages
+    const packages = await StudentPackage.find({
+      student: studentId,
+    })
+      .populate("package")
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      message: "Student packages fetched successfully",
+      data: packages,
+    });
+
+  } catch (error) {
+    console.error("My package error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
+
+app.post("/student/retry-package-order", verifyToken, async (req, res) => {
+  try {
+    const { studentPackageId } = req.body;
+
+    if (!studentPackageId) {
+      return res.status(400).json({
+        success: false,
+        message: "Student package ID is required",
+      });
+    }
+
+    // Student ka pending package find karo
+    const studentPackage = await StudentPackage.findOne({
+      _id: studentPackageId,
+      student: req.userId,
+      paymentStatus: "pending",
+      packageStatus: "inactive",
+    }).populate("package");
+
+    if (!studentPackage) {
+      return res.status(404).json({
+        success: false,
+        message: "Pending package not found",
+      });
+    }
+
+    const packageData = studentPackage.package;
+
+    if (!packageData || packageData.status !== "active") {
+      return res.status(400).json({
+        success: false,
+        message: "This package is not available",
+      });
+    }
+
+    // Amount rupees se paise mein convert karo
+    const amount = Math.round(Number(packageData.price) * 100);
+
+    if (!Number.isSafeInteger(amount) || amount <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid package amount",
+      });
+    }
+
+    // Naya Razorpay order create karo
+    const order = await razorpay.orders.create({
+      amount,
+      currency: "INR",
+      receipt: `retry_${Date.now()}`,
+      notes: {
+        studentId: req.userId.toString(),
+        studentPackageId: studentPackage._id.toString(),
+      },
+    });
+
+    // Existing pending record mein naya order ID save karo
+    studentPackage.razorpayOrderId = order.id;
+    studentPackage.amountPaise = amount;
+    studentPackage.currency = "INR";
+
+    await studentPackage.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Retry payment order created successfully",
+      orderId: order.id,
+      amount: order.amount,
+      currency: order.currency,
+      packageName: studentPackage.packageName,
+      key: process.env.RAZORPAY_KEY_ID,
+      studentPackageId: studentPackage._id,
+    });
+
+  } catch (error) {
+    console.error("Retry payment error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
+//------------------------------//
+
 
 app.post("/admin-login", async (req, res) => {
   try {
@@ -712,108 +1136,261 @@ app.post("/reset-password", async (req, res) => {
 });
 
 
-// Public Student Registration
-app.post("/student-register", async (req, res) => {
+// frontend create student 
+
+app.get("/student-profile", verifyToken, async (req, res) => {
   try {
-    const { name, email, phone, password } = req.body || {};
-
-    // Required fields validation
-    if (
-      !name?.trim() ||
-      !email?.trim() ||
-      !phone?.trim() ||
-      !password
-    ) {
-      return res.status(400).json({
-        status: false,
-        message: "All fields are required",
-      });
-    }
-
-    if (password.length < 8) {
-      return res.status(400).json({
-        status: false,
-        message: "Password must be at least 8 characters",
-      });
-    }
-
-    if (!/^[0-9]{10}$/.test(String(phone).trim())) {
-      return res.status(400).json({
-        status: false,
-        message: "Enter a valid 10-digit phone number",
-      });
-    }
-
-    const normalizedEmail = email.trim().toLowerCase();
-
-    // Check existing email
-    const existingUser = await User1.findOne({
-      email: normalizedEmail,
-    });
-
-    if (existingUser) {
-      return res.status(409).json({
-        status: false,
-        message: "Email already exists",
-      });
-    }
-
-    // Automatically assign the active Student role
-    // Never accept a role ID from public registration input
-    const studentRole = await Role.findOne({
-      roleName: { $regex: /^student$/i },
-      status: "active",
-    });
-
-    if (!studentRole) {
-      return res.status(500).json({
-        status: false,
-        message: "Active Student role is not configured",
-      });
-    }
-
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 9);
-
-    // Create student account
-    const newStudent = await User1.create({
-      name: name.trim(),
-      email: normalizedEmail,
-      phone: String(phone).trim(),
-      password: hashedPassword,
-      role: studentRole._id,
-      isEmailVerified: false,
-      isPhoneVerified: false,
-      status: "active",
-    });
-
-    // Never return the password
-    const studentData = await User1.findById(newStudent._id)
+    const user = await User1.findById(req.userId)
       .select("-password")
       .populate("role");
 
-    return res.status(201).json({
-      status: true,
-      message: "Student registered successfully",
-      user: studentData,
-    });
-  } catch (error) {
-    console.error("Student registration error:", error);
-
-    if (error.code === 11000) {
-      return res.status(409).json({
-        status: false,
-        message: "Email already exists",
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "Student not found",
       });
     }
 
+    const roleName = user.role?.roleName?.toLowerCase();
+
+    if (roleName !== "student") {
+      return res.status(403).json({
+        success: false,
+        message: "Only students can access this profile",
+      });
+    }
+
+    const profile = await StudentProfile.findOne({
+      student: req.userId,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Student profile fetched successfully",
+      user,
+      profile,
+    });
+
+  } catch (error) {
+    console.error("Student profile error:", error);
+
     return res.status(500).json({
-      status: false,
-      message: "Student registration failed",
+      success: false,
+      message: "Internal server error",
     });
   }
 });
 
+
+app.put("/student-profile/personal", verifyToken, async (req, res) => {
+  try {
+    const {
+      gender,
+      dateOfBirth,
+      profileImage,
+      address,
+    } = req.body;
+
+    const user = await User1.findById(req.userId).populate("role");
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "Student not found",
+      });
+    }
+
+    if (user.role?.roleName?.toLowerCase() !== "student") {
+      return res.status(403).json({
+        success: false,
+        message: "Only students can update their profile",
+      });
+    }
+
+    const updateData = {};
+
+    if (gender !== undefined) updateData.gender = gender;
+    if (dateOfBirth !== undefined) updateData.dateOfBirth = dateOfBirth;
+    if (profileImage !== undefined) updateData.profileImage = profileImage;
+
+    if (address !== undefined) {
+      updateData.address = {
+        addressLine: address.addressLine || "",
+        city: address.city || "",
+        state: address.state || "",
+        country: address.country || "India",
+        pincode: address.pincode || "",
+      };
+    }
+
+    const profile = await StudentProfile.findOneAndUpdate(
+      { student: req.userId },
+      { $set: updateData },
+      {
+        new: true,
+        upsert: true,
+        runValidators: true,
+        setDefaultsOnInsert: true,
+      }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Personal details saved successfully",
+      profile,
+    });
+
+  } catch (error) {
+    console.error("Personal profile update error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to save personal details",
+    });
+  }
+});
+
+app.put("/student-profile/upload-image",
+  verifyToken,
+  profileUpload.single("profileImage"),
+  async (req, res) => {
+    try {
+      const user = await User1.findById(req.userId).populate("role");
+
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: "Student not found",
+        });
+      }
+
+      if (user.role?.roleName?.toLowerCase() !== "student") {
+        return res.status(403).json({
+          success: false,
+          message: "Only students can upload profile images",
+        });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({
+          success: false,
+          message: "Please select an image",
+        });
+      }
+
+      const imagePath = `/uploads/profile/${req.file.filename}`;
+
+      const profile = await StudentProfile.findOneAndUpdate(
+        { student: req.userId },
+        {
+          $set: {
+            profileImage: imagePath,
+          },
+        },
+        {
+          new: true,
+          upsert: true,
+          runValidators: true,
+          setDefaultsOnInsert: true,
+        }
+      );
+
+      return res.status(200).json({
+        success: true,
+        message: "Profile image uploaded successfully",
+        profile,
+      });
+    } catch (error) {
+      console.error("Image upload error:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Image upload failed",
+      });
+    }
+  }
+);
+
+
+app.put("/student-profile/academic", verifyToken, async (req, res) => {
+  try {
+    const {
+      course,
+      college,
+      university,
+      stream,
+      admissionYear,
+      semester,
+      enrollmentNumber,
+      qualification,
+      board,
+      passingYear,
+      percentage,
+    } = req.body;
+
+    // Check student
+    const user = await User1.findById(req.userId).populate("role");
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "Student not found",
+      });
+    }
+
+    // Check student role
+    if (user.role?.roleName?.toLowerCase() !== "student") {
+      return res.status(403).json({
+        success: false,
+        message: "Only students can update academic details",
+      });
+    }
+
+    // Update academic details
+    const academicDetails = {
+      course: course || "",
+      college: college || "",
+      university: university || "",
+      stream: stream || "",
+      admissionYear: admissionYear || "",
+      semester: semester || "",
+      enrollmentNumber: enrollmentNumber || "",
+      qualification: qualification || "",
+      board: board || "",
+      passingYear: passingYear || "",
+      percentage: percentage || "",
+    };
+
+    const profile = await StudentProfile.findOneAndUpdate(
+      { student: req.userId },
+      {
+        $set: {
+          academicDetails,
+        },
+      },
+      {
+        new: true,
+        upsert: true,
+        runValidators: true,
+        setDefaultsOnInsert: true,
+      }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Academic details updated successfully",
+      profile,
+    });
+
+  } catch (error) {
+    console.error("Academic details update error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to update academic details",
+    });
+  }
+});
 
 app.post("/admin-user",
   verifyToken,
@@ -931,10 +1508,271 @@ app.post("/admin-user",
   },
 );
 
-//get user
+app.get("/admin-user/bulk-template",
+  verifyToken,
+  requirePermission("students", "create"),
+  (req, res) => {
+    try {
+      const data = [
+        {
+          name: "Rahul Sharma",
+          email: "rahul@example.com",
+          phone: "9876543210",
+          password: "TempPass@123",
+        },
+        {
+          name: "Priya Verma",
+          email: "priya@example.com",
+          phone: "9876543211",
+          password: "TempPass@456",
+        },
+      ];
 
-app.get(
-  "/get-user",
+      const worksheet = XLSX.utils.json_to_sheet(data);
+      const workbook = XLSX.utils.book_new();
+
+      XLSX.utils.book_append_sheet(
+        workbook,
+        worksheet,
+        "Students"
+      );
+
+      const buffer = XLSX.write(workbook, {
+        type: "buffer",
+        bookType: "xlsx",
+      });
+
+      res.setHeader(
+        "Content-Disposition",
+        'attachment; filename="students-template.xlsx"'
+      );
+
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      );
+
+      return res.send(buffer);
+    } catch (error) {
+      console.error("Template error:", error);
+      return res.status(500).json({
+        status: false,
+        message: "Template download failed",
+      });
+    }
+  }
+);
+
+app.post("/admin-user/bulk-import",
+  verifyToken,
+  requirePermission("students", "create"),
+  (req, res, next) => {
+    upload.single("file")(req, res, (error) => {
+      if (error) {
+        return res.status(400).json({
+          status: false,
+          message: error.message || "Excel upload failed",
+        });
+      }
+
+      next();
+    });
+  },
+  async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({
+          status: false,
+          message: "Please upload an Excel file",
+        });
+      }
+
+      const workbook = XLSX.read(req.file.buffer, {
+        type: "buffer",
+      });
+
+      const sheetName = workbook.SheetNames[0];
+
+      if (!sheetName) {
+        return res.status(400).json({
+          status: false,
+          message: "Excel sheet is empty",
+        });
+      }
+
+      const worksheet = workbook.Sheets[sheetName];
+
+      const rows = XLSX.utils.sheet_to_json(worksheet, {
+        defval: "",
+        raw: false,
+      });
+
+      if (rows.length === 0) {
+        return res.status(400).json({
+          status: false,
+          message: "Excel file has no student records",
+        });
+      }
+
+      // Limit import size
+      if (rows.length > 500) {
+        return res.status(400).json({
+          status: false,
+          message: "Maximum 500 students per upload",
+        });
+      }
+
+      // Find the existing active Student role
+      const roles = await Role.find({
+        status: "active",
+      }).lean();
+
+      const studentRole = roles.find(
+        (item) =>
+          item.roleName.replace(/\s+/g, "").toLowerCase() ===
+          "student"
+      );
+
+      if (!studentRole) {
+        return res.status(400).json({
+          status: false,
+          message: "Active Student role not found. Please create it first.",
+        });
+      }
+
+      const results = [];
+      const seenEmails = new Set();
+      const seenPhones = new Set();
+
+      let added = 0;
+      let failed = 0;
+
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        const rowNumber = i + 2; // Header is row 1
+
+        try {
+          const name = String(row.name ?? "").trim();
+          const email = String(row.email ?? "")
+            .trim()
+            .toLowerCase();
+          const phone = String(row.phone ?? "").trim();
+          const password = String(row.password ?? "");
+
+          // Required field validation
+          if (!name || !email || !phone || !password) {
+            throw new Error(
+              "Name, email, phone and password are required"
+            );
+          }
+
+          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            throw new Error("Invalid email format");
+          }
+
+          if (!/^\d{10}$/.test(phone)) {
+            throw new Error(
+              "Phone must contain exactly 10 digits"
+            );
+          }
+
+          if (password.length < 8) {
+            throw new Error(
+              "Password must be at least 8 characters"
+            );
+          }
+
+          // Detect duplicates inside the uploaded Excel
+          if (seenEmails.has(email)) {
+            throw new Error("Duplicate email in Excel file");
+          }
+
+          if (seenPhones.has(phone)) {
+            throw new Error("Duplicate phone in Excel file");
+          }
+
+          seenEmails.add(email);
+          seenPhones.add(phone);
+
+          // Check existing database records
+          const existingUser = await User1.findOne({
+            $or: [{ email }, { phone }],
+          }).select("_id email phone");
+
+          if (existingUser) {
+            if (existingUser.email === email) {
+              throw new Error("Email already exists");
+            }
+
+            if (String(existingUser.phone) === phone) {
+              throw new Error("Phone already exists");
+            }
+
+            throw new Error("Email or phone already exists");
+          }
+
+          // Hash password before saving
+          const hashedPassword = await bcrypt.hash(password, 9);
+
+          await User1.create({
+            name,
+            email,
+            phone,
+            password: hashedPassword,
+            role: studentRole._id,
+            isEmailVerified: true,
+            isPhoneVerified: true,
+            status: "active",
+          });
+
+          added++;
+
+          results.push({
+            row: rowNumber,
+            name,
+            email,
+            status: "success",
+            message: "Student added successfully",
+          });
+        } catch (error) {
+          failed++;
+
+          results.push({
+            row: rowNumber,
+            name: String(row.name ?? "").trim(),
+            email: String(row.email ?? "").trim(),
+            status: "failed",
+            message:
+              error.code === 11000
+                ? "Email or phone already exists"
+                : error.message || "Student could not be added",
+          });
+        }
+      }
+
+      return res.status(200).json({
+        status: true,
+        message: "Bulk import completed",
+        summary: {
+          total: rows.length,
+          added,
+          failed,
+        },
+        results,
+      });
+    } catch (error) {
+      console.error("Bulk import error:", error);
+
+      return res.status(500).json({
+        status: false,
+        message: "Bulk import failed",
+      });
+    }
+  }
+);
+
+//get user
+app.get("/get-user",
   verifyToken,
   requirePermission("students", "view"),
   async (req, res) => {
@@ -959,10 +1797,8 @@ app.get(
     }
   },
 );
-
 // EDIT STUDENT
-app.post(
-  "/admin-edit",
+app.post("/admin-edit",
   verifyToken,
   requirePermission("students", "update"),
   async (req, res) => {
@@ -1103,6 +1939,35 @@ app.post(
   },
 );
 
+app.get("/get-student", verifyToken, async (req, res) => {
+  try {
+    const getUser = await User1.findById(req.userId)
+      .select("-password")
+      .populate("role");
+
+    if (!getUser) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Student data fetched successfully",
+      data: getUser,
+    });
+
+  } catch (error) {
+    console.log("Get Student Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+});
+
 // DELETE STUDENT
 app.post("/admin-delete",
   verifyToken,
@@ -1169,8 +2034,7 @@ app.post("/admin-delete",
 
 // add college route
 
-app.post(
-  "/add-college",
+app.post("/add-college",
   verifyToken,
  requirePermission("colleges", "create"),
   async (req, res) => {
@@ -1270,8 +2134,7 @@ app.post(
 
 //get college route
 
-app.get(
-  "/get-college",
+app.get("/get-college",
   verifyToken,
  requirePermission("colleges", "view"),
   async (req, res) => {
@@ -1293,10 +2156,64 @@ app.get(
     }
   },
 );
+app.get("/get-colleges", async (req, res) => {
+  try {
+    const colleges = await College.find().sort({
+      createdAt: -1,
+    });
 
+    return res.status(200).json({
+      status: true,
+      message: "Colleges fetched successfully",
+      colleges,
+    });
+  } catch (error) {
+    console.error("Get colleges error:", error);
+
+    return res.status(500).json({
+      status: false,
+      message: "Failed to fetch colleges",
+    });
+  }
+});
+app.get("/get-college/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Validate MongoDB ID
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({
+        status: false,
+        message: "Invalid college ID",
+      });
+    }
+
+    // Find college by ID
+    const college = await College.findById(id);
+
+    if (!college) {
+      return res.status(404).json({
+        status: false,
+        message: "College not found",
+      });
+    }
+
+    return res.status(200).json({
+      status: true,
+      message: "College fetched successfully",
+      college,
+    });
+  } catch (error) {
+    console.error("Get college by ID error:", error);
+
+    return res.status(500).json({
+      status: false,
+      message: "Failed to fetch college",
+    });
+  }
+});
 //edit college route
-app.post(
-  "/edit-college",
+app.post("/edit-college",
   verifyToken,
   requirePermission("colleges", "update"),
   async (req, res) => {
@@ -1454,6 +2371,288 @@ app.post(
   },
 );
 
+
+
+// University add route
+app.post("/add-university",
+  verifyToken,
+  requirePermission("universities", "create"),
+  async (req, res) => {
+    try {
+      const {
+        name,
+        shortName,
+        slug,
+        logo,
+        description,
+        type,
+        establishedYear,
+        recognition,
+        accreditation,
+        location,
+        contact,
+        website,
+        status,
+        isVerified,
+      } = req.body;
+
+      if (!name) {
+        return res.send({
+          message: "University name is required",
+          status: false,
+        });
+      }
+
+      const existingUniversity = await University.findOne({
+        name: name.trim(),
+      });
+
+      if (existingUniversity) {
+        return res.send({
+          message: "University already exists",
+          status: false,
+        });
+      }
+
+      const universitySlug =
+        slug ||
+        name
+          .toLowerCase()
+          .trim()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "");
+
+      const existingSlug = await University.findOne({
+        slug: universitySlug,
+      });
+
+      if (existingSlug) {
+        return res.send({
+          message: "University slug already exists",
+          status: false,
+        });
+      }
+
+      const university = await University.create({
+        name: name.trim(),
+        shortName,
+        slug: universitySlug,
+        logo,
+        description,
+        type,
+        establishedYear,
+        recognition,
+        accreditation,
+        location,
+        contact,
+        website,
+        status: status || "pending",
+        isVerified: isVerified || false,
+      });
+
+      res.send({
+        message: "University added successfully",
+        status: true,
+        university,
+      });
+    } catch (error) {
+      console.log(error);
+
+      res.send({
+        message: "University not added",
+        status: false,
+      });
+    }
+  }
+);
+
+// get university route
+
+app.get("/get-university",
+  verifyToken,
+  requirePermission("universities", "view"),
+  async (req, res) => {
+    try {
+      const universities = await University.find().sort({
+        createdAt: -1,
+      });
+
+      res.send({
+        message: "University data fetched successfully",
+        status: true,
+        university: universities,
+      });
+    } catch (error) {
+      console.log(error);
+
+      res.send({
+        message: "University data not found",
+        status: false,
+      });
+    }
+  }
+);
+
+
+// Edit university Route 
+app.post("/edit-university",
+  verifyToken,
+  requirePermission("universities", "update"),
+  async (req, res) => {
+    try {
+      const {
+        _id,
+        name,
+        shortName,
+        slug,
+        logo,
+        description,
+        type,
+        establishedYear,
+        recognition,
+        accreditation,
+        location,
+        contact,
+        website,
+        status,
+        isVerified,
+      } = req.body;
+
+      if (!_id) {
+        return res.send({
+          message: "University ID is required",
+          status: false,
+        });
+      }
+
+      if (!name) {
+        return res.send({
+          message: "University name is required",
+          status: false,
+        });
+      }
+
+      const duplicateUniversity = await University.findOne({
+        name: name.trim(),
+        _id: { $ne: _id },
+      });
+
+      if (duplicateUniversity) {
+        return res.send({
+          message: "University already exists",
+          status: false,
+        });
+      }
+
+      const universitySlug =
+        slug ||
+        name
+          .toLowerCase()
+          .trim()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "");
+
+      const duplicateSlug = await University.findOne({
+        slug: universitySlug,
+        _id: { $ne: _id },
+      });
+
+      if (duplicateSlug) {
+        return res.send({
+          message: "University slug already exists",
+          status: false,
+        });
+      }
+
+      const updateUniversity = await University.updateOne(
+        { _id },
+        {
+          $set: {
+            name: name.trim(),
+            shortName,
+            slug: universitySlug,
+            logo,
+            description,
+            type,
+            establishedYear,
+            recognition,
+            accreditation,
+            location,
+            contact,
+            website,
+            status,
+            isVerified,
+          },
+        }
+      );
+
+      if (updateUniversity.matchedCount === 0) {
+        return res.send({
+          message: "University not found",
+          status: false,
+        });
+      }
+
+      const updatedUniversity = await University.findById(_id);
+
+      res.send({
+        message: "University updated successfully",
+        status: true,
+        university: updatedUniversity,
+      });
+    } catch (error) {
+      console.log(error);
+
+      res.send({
+        message: "University not updated",
+        status: false,
+      });
+    }
+  }
+);
+
+
+// delete University
+app.post(
+  "/delete-university",
+  verifyToken,
+  requirePermission("universities", "delete"),
+  async (req, res) => {
+    try {
+      const { id } = req.body;
+
+      if (!id) {
+        return res.send({
+          message: "University ID is required",
+          status: false,
+        });
+      }
+
+      const deletedUniversity = await University.findByIdAndDelete(id);
+
+      if (!deletedUniversity) {
+        return res.send({
+          message: "University not found",
+          status: false,
+        });
+      }
+
+      res.send({
+        message: "University deleted successfully",
+        status: true,
+        university: deletedUniversity,
+      });
+    } catch (error) {
+      console.error("DELETE UNIVERSITY ERROR:", error);
+
+      res.status(500).send({
+        message: "University not deleted",
+        status: false,
+      });
+    }
+  }
+);
+
 // STREAM HELPERS
 
 const STREAM_STATUSES = ["active", "inactive"];
@@ -1514,7 +2713,6 @@ const validateParentStream = async (parentStream, currentId = null) => {
       message: "A stream cannot be its own parent",
     };
   }
-
   const parent = await Stream.findById(parentStream).select("_id parentStream");
 
   if (!parent) {
@@ -1622,6 +2820,37 @@ app.get("/get-streams",
     }
   },
 );
+
+app.get("/student/get-streams", verifyToken, async (req, res) => {
+  try {
+    const user = await User1.findById(req.userId).populate("role");
+
+    if (!user || user.role?.roleName?.toLowerCase() !== "student") {
+      return res.status(403).json({
+        success: false,
+        message: "Only students can access streams",
+      });
+    }
+
+    const streams = await Stream.find({ status: "active" })
+      .select("_id name slug code parentStream")
+      .populate("parentStream", "name slug code")
+      .sort({ displayOrder: 1, name: 1 });
+
+    return res.status(200).json({
+      success: true,
+      count: streams.length,
+      streams,
+    });
+  } catch (error) {
+    console.error("Student streams error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch streams",
+    });
+  }
+});
 
 // GET STREAM BY ID
 
@@ -2515,10 +3744,11 @@ app.put(
 
 // ==================== DELETE DEGREE ====================
 
+
 app.delete(
   "/delete-degree/:id",
   verifyToken,
-  requirePermission("degrees","delete"),
+  requirePermission("degrees", "delete"),
   async (req, res) => {
     try {
       const { id } = req.params;
@@ -2539,17 +3769,6 @@ app.delete(
         });
       }
 
-      const linkedCourse = await Course.findOne({
-        degree: id,
-      }).select("_id name");
-
-      if (linkedCourse) {
-        return res.status(409).json({
-          success: false,
-          message: "Cannot delete degree because courses are linked to it",
-        });
-      }
-
       await Degree.findByIdAndDelete(id);
 
       return res.json({
@@ -2561,6 +3780,7 @@ app.delete(
     }
   },
 );
+
 
 // ==================== COURSE HELPERS ====================
 
@@ -2915,6 +4135,39 @@ app.get("/get-courses",
   },
 );
 
+app.get("/student/get-courses", verifyToken, async (req, res) => {
+  try {
+    const user = await User1.findById(req.userId).populate("role");
+
+    if (!user || user.role?.roleName?.toLowerCase() !== "student") {
+      return res.status(403).json({
+        success: false,
+        message: "Only students can access courses",
+      });
+    }
+
+    const courses = await Course.find({ status: "active" })
+      .select("_id name slug code description stream degree duration")
+      .populate("stream", "name slug code")
+      .populate("degree", "name shortName level")
+      .sort({ name: 1 });
+
+    return res.status(200).json({
+      success: true,
+      count: courses.length,
+      courses,
+    });
+  } catch (error) {
+    console.error("Student courses error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch courses",
+    });
+  }
+});
+
+
 // ==================== GET COURSE BY ID ====================
 
 app.get(
@@ -2952,6 +4205,31 @@ app.get(
     }
   },
 );
+
+// GET ALL COURSES FOR STUDENT (WITHOUT ROLE PERMISSION)
+
+app.get("/get-course", async (req, res) => {
+  try {
+    const courses = await Course.find({ status: "active" })
+      .populate("stream", "name slug code")
+      .populate("degree", "name shortName level")
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      count: courses.length,
+      courses,
+    });
+  } catch (error) {
+    console.error("Get Student Courses Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+});
+
 
 // ==================== UPDATE COURSE ====================
 
@@ -3663,8 +4941,316 @@ app.delete("/delete-specialization/:id",
   },
 );
 
+// CREATE EMAIL TEMPLATE
+app.post("/create-emailtemp",verifyToken,
+  requirePermission("emailTemplates", "create"), async (req, res) => {
+  try {
+    const { email, title, message } = req.body;
+  
+     
+    if (
+      typeof email !== "string" ||
+      typeof title !== "string" ||
+      typeof message !== "string" ||
+      !email.trim() ||
+      !title.trim() ||
+      !sanitizeHtml(message).trim()
+    ) {
+      return res.status(400).json({
+        status: false,
+        message: "Email, title and message are required",
+      });
+    }
+
+    const template = await EmailTemplate.create({
+      email: email.trim().toLowerCase(),
+      title: title.trim(),
+      message: sanitizeHtml(message, {
+        allowedTags: [
+          "p", "br", "h1", "h2", "h3",
+          "strong", "b", "i", "em", "u",
+          "ul", "ol", "li", "blockquote", "a",
+        ],
+        allowedAttributes: {
+          a: ["href", "target", "rel"],
+        },
+        allowedSchemes: ["http", "https", "mailto"],
+      }),
+    });
+
+    return res.status(201).json({
+      status: true,
+      message: "Email template created successfully",
+      data: template,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      status: false,
+      message: error.message,
+    });
+  }
+});
+
+// GET ALL EMAIL TEMPLATES
+app.get("/get-emailtemps",verifyToken,
+  requirePermission("emailTemplates", "view"), async (req, res) => {
+  try {
+    const templates = await EmailTemplate.find().sort({
+      createdAt: -1,
+    });
+
+    return res.status(200).json({
+      status: true,
+      total: templates.length,
+      data: templates,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      status: false,
+      message: error.message,
+    });
+  }
+});
+
+// GET SINGLE EMAIL TEMPLATE
+app.get("/get-emailtemp/:id",verifyToken,
+  requirePermission("emailTemplates", "view"), async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(400).json({
+        status: false,
+        message: "Invalid template ID",
+      });
+    }
+
+    const template = await EmailTemplate.findById(req.params.id);
+
+    if (!template) {
+      return res.status(404).json({
+        status: false,
+        message: "Template not found",
+      });
+    }
+
+    return res.status(200).json({
+      status: true,
+      data: template,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      status: false,
+      message: error.message,
+    });
+  }
+});
+
+// UPDATE EMAIL TEMPLATE
+app.put("/update-emailtemp/:id",verifyToken,
+  requirePermission("emailTemplates", "update"), async (req, res) => {
+  try {
+    const { email, title, message } = req.body;
+
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(400).json({
+        status: false,
+        message: "Invalid template ID",
+      });
+    }
+
+    if (
+      typeof email !== "string" ||
+      typeof title !== "string" ||
+      typeof message !== "string" ||
+      !email.trim() ||
+      !title.trim() ||
+      !sanitizeHtml(message).trim()
+    ) {
+      return res.status(400).json({
+        status: false,
+        message: "Email, title and message are required",
+      });
+    }
+
+    const template = await EmailTemplate.findByIdAndUpdate(
+      req.params.id,
+      {
+        email: email.trim().toLowerCase(),
+        title: title.trim(),
+        message: sanitizeHtml(message, {
+          allowedTags: [
+            "p", "br", "h1", "h2", "h3",
+            "strong", "b", "i", "em", "u",
+            "ul", "ol", "li", "blockquote", "a",
+          ],
+          allowedAttributes: {
+            a: ["href", "target", "rel"],
+          },
+          allowedSchemes: ["http", "https", "mailto"],
+        }),
+      },
+      { new: true, runValidators: true }
+    );
+
+    if (!template) {
+      return res.status(404).json({
+        status: false,
+        message: "Template not found",
+      });
+    }
+
+    return res.status(200).json({
+      status: true,
+      message: "Email template updated successfully",
+      data: template,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      status: false,
+      message: error.message,
+    });
+  }
+});
+
+// DELETE EMAIL TEMPLATE
+app.delete("/delete-emailtemp/:id",verifyToken,
+  requirePermission("emailTemplates", "delete"), async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(400).json({
+        status: false,
+        message: "Invalid template ID",
+      });
+    }
+
+    const template = await EmailTemplate.findByIdAndDelete(
+      req.params.id
+    );
+
+    if (!template) {
+      return res.status(404).json({
+        status: false,
+        message: "Template not found",
+      });
+    }
+
+    return res.status(200).json({
+      status: true,
+      message: "Email template deleted successfully",
+    });
+  } catch (error) {
+    return res.status(500).json({
+      status: false,
+      message: error.message,
+    });
+  }
+});
 
 
+app.post("/contact",async (req, res) => {
+  try {
+    const {
+      name,
+      email,
+      contact,
+      subject,
+      enquiryType,
+      message,
+    } = req.body;
+
+    // Check duplicate email
+    const verifyUser = await Contact.findOne({
+      email: email.toLowerCase().trim(),
+    });
+
+    if (verifyUser) {
+      return res.status(409).send({
+        status: false,
+        message: "User already registered with this email",
+      });
+    }
+
+    // Save contact
+    const saveUser = await Contact.create({
+      name,
+      email,
+      contact,
+      subject,
+      enquiryType,
+      message,
+    });
+
+    return res.status(201).send({
+      status: true,
+      message: "Inquiry submitted successfully",
+      data: saveUser,
+    });
+
+  } catch (err) {
+    console.log("Contact Error:", err);
+
+    if (err.code === 11000) {
+      return res.status(409).send({
+        status: false,
+        message: "Email already exists",
+      });
+    }
+
+    return res.status(500).send({
+      status: false,
+      message: "Inquiry not submitted successfully",
+    });
+  }
+});
+
+app.get("/get-contact",async(req,res)=>{
+ try{ const getData=await Contact.find()
+  // console.log("data is : ",getData);
+  return res.send({
+    status:true,
+    message:"contact data geted",
+    data:getData
+  })  
+}
+catch(err){
+  return res.send({
+    status:false,
+    message:err.message
+  })
+}
+})
+
+app.delete("/delete-contact/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).send({
+        status: false,
+        message: "Invalid contact ID"
+      });
+    }
+
+    const deletedContact = await Contact.findByIdAndDelete(id);
+
+    if (!deletedContact) {
+      return res.status(404).send({
+        status: false,
+        message: "Contact not found"
+      });
+    }
+
+    return res.status(200).send({
+      status: true,
+      message: "Contact deleted successfully"
+    });
+
+  } catch (err) {
+    return res.status(500).send({
+      status: false,
+      message: err.message
+    });
+  }
+});
 // Add role permissions 
 
 const MODULES = [
@@ -3673,8 +5259,10 @@ const MODULES = [
   "roles",
   "courses",
   "degrees",
+  "universities",
   "streams",
   "specializations",
+  "emailTemplates",
 ];
 
 const ACTIONS = ["create", "view", "update", "delete"];
@@ -3771,11 +5359,11 @@ const normalizePermissions = (permissions = {}) => {
   return normalized;
 };
 
+
 // ADD ROLE
 
 
-app.post(
-  "/add-role",
+app.post("/add-role",
   verifyToken,
   requireRole("superAdmin"),
   async (req, res) => {
@@ -3858,8 +5446,7 @@ app.post(
 
 //edit role
 
-app.post(
-  "/edit-role",
+app.post("/edit-role",
   verifyToken,
   requireRole("superAdmin"),
   async (req, res) => {
@@ -3964,8 +5551,7 @@ app.post(
 
 
 // GET ALL ROLES
-app.get(
-  "/get-role",
+app.get("/get-role",
   verifyToken,
   requireRole("superAdmin"),
   async (req, res) => {
@@ -3991,8 +5577,7 @@ app.get(
 );
 
 // DELETE ROLE
-app.post(
-  "/delete-role",
+app.post("/delete-role",
   verifyToken,
   requireRole("superAdmin"),
   async (req, res) => {
@@ -4040,8 +5625,7 @@ app.post(
 );
 
 // EDIT ROLE
-app.post(
-  "/edit-role",
+app.post("/edit-role",
   verifyToken,
   requireRole("superAdmin"),
   async (req, res) => {
@@ -4132,8 +5716,95 @@ app.post(
   },
 );
 
-app.get(
-  "/test-superadmin",
+app.get("/get-roles-dropdown", async (req, res) => {
+  try {
+    const roles = await Role.find({ status: "active" })
+      .select("_id roleName")
+      .sort({ roleName: 1 });
+
+    res.status(200).json({
+      success: true,
+      message: "Roles fetched successfully",
+      data: roles,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
+app.post("/create-user", async (req, res) => {
+  try {
+    const { name, email, phone, password, role } = req.body;
+
+    if (!name || !email || !password || !role) {
+      return res.status(400).json({
+        success: false,
+        message: "All required fields are mandatory",
+      });
+    }
+
+    // Check duplicate email
+    const existingUser = await User1.findOne({
+      email: email.toLowerCase().trim(),
+    });
+
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: "Email already exists",
+      });
+    }
+
+    // Check role
+    const roleData = await Role.findOne({
+      _id: role,
+      status: "active",
+    });
+
+    if (!roleData) {
+      return res.status(404).json({
+        success: false,
+        message: "Invalid or inactive role",
+      });
+    }
+
+    // Password hashing
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Create user
+    const newUser = await User1.create({
+      name,
+      email: email.toLowerCase().trim(),
+      phone,
+      password: hashedPassword,
+      role: roleData._id,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "User created successfully",
+      data: {
+        _id: newUser._id,
+        name: newUser.name,
+        email: newUser.email,
+        phone: newUser.phone,
+        role: roleData.roleName,
+      },
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
+
+app.get("/test-superadmin",
   verifyToken,
   requireRole("superAdmin"),
   (req, res) => {
@@ -4143,6 +5814,2383 @@ app.get(
     });
   },
 );
+
+//send student request 
+app.post("/student/counselling-request", verifyToken, async (req, res) => {
+  try {
+    const user = await User1.findById(req.userId).populate("role");
+
+    if (!user || user.role?.roleName?.toLowerCase() !== "student") {
+      return res.status(403).json({
+        success: false,
+        message: "Only students can submit counselling requests",
+      });
+    }
+
+    const {
+      academicYear,
+      admissionLevel,
+      preferredStreams,
+      preferredCourses,
+      preferredLocations,
+      budget,
+      entranceExams,
+      counsellingMode,
+      preferredTime,
+    } = req.body;
+
+    if (!academicYear || !admissionLevel) {
+      return res.status(400).json({
+        success: false,
+        message: "Academic year and admission level are required",
+      });
+    }
+
+    const requestNumber = `CR-${Date.now()}-${Math.floor(
+      1000 + Math.random() * 9000
+    )}`;
+
+    const counsellingRequest = await CounsellingRequest.create({
+      requestNumber,
+      student: req.userId,
+      academicYear,
+      admissionLevel,
+      preferredStreams: preferredStreams || [],
+      preferredCourses: preferredCourses || [],
+      preferredLocations: preferredLocations || [],
+      budget: budget || {},
+      entranceExams: entranceExams || [],
+      counsellingMode: counsellingMode || "phone",
+      preferredTime: preferredTime || {},
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "Counselling request submitted successfully",
+      data: counsellingRequest,
+    });
+  } catch (error) {
+    console.error("Counselling request error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to submit counselling request",
+    });
+  }
+});
+
+
+app.get("/counsellingrequests", verifyToken, async (req, res) => {
+  try {
+    // 1. Logged-in user find karo
+    const loggedInUser = await User1.findById(req.userId).populate("role");
+
+    if (!loggedInUser) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // 2. Role check karo
+    const roleName = loggedInUser.role?.roleName
+      ?.toLowerCase()
+      .replace(/[\s_-]/g, "");
+
+    const allowedRoles = ["superadmin", "admin", "counsellor"];
+
+    if (!allowedRoles.includes(roleName)) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not authorized to view counselling requests",
+      });
+    }
+
+    // 3. Query parameters
+    const {
+      status,
+      priority,
+      admissionLevel,
+      page = 1,
+      limit = 10,
+    } = req.query;
+
+    // 4. Filter object
+    const filter = {};
+
+    if (status) {
+      filter.status = status;
+    }
+
+    if (priority) {
+      filter.priority = priority;
+    }
+
+    if (admissionLevel) {
+      filter.admissionLevel = admissionLevel;
+    }
+
+    // 5. Pagination
+    const currentPage = Math.max(1, parseInt(page) || 1);
+    const perPage = Math.min(100, Math.max(1, parseInt(limit) || 10));
+    const skip = (currentPage - 1) * perPage;
+
+    // 6. Total count
+    const totalRequests = await CounsellingRequest.countDocuments(filter);
+
+    // 7. Fetch counselling requests
+    const requests = await CounsellingRequest.find(filter)
+      .populate("student", "name email phone")
+      .populate("preferredStreams")
+      .populate("preferredCourses")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(perPage);
+
+    // 8. Response
+    return res.status(200).json({
+      success: true,
+      message: "Counselling requests fetched successfully",
+      count: requests.length,
+      totalRequests,
+      currentPage,
+      totalPages: Math.ceil(totalRequests / perPage),
+      data: requests,
+    });
+
+  } catch (error) {
+    console.error("Counselling Requests Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch counselling requests",
+      error: error.message,
+    });
+  }
+});
+
+app.get("/get-counsellors", verifyToken, async (req, res) => {
+  try {
+    const counsellorRole = await Role.findOne({
+      roleName: {
+        $regex: /^counsellor$/i,
+      },
+      status: "active",
+    });
+
+    if (!counsellorRole) {
+      return res.status(404).json({
+        success: false,
+        message: "Counsellor role not found",
+      });
+    }
+
+    const counsellors = await User1.find({
+      role: counsellorRole._id,
+      status: "active",
+    }).select("name email phone");
+
+    return res.status(200).json({
+      success: true,
+      message: "Counsellors fetched successfully",
+      data: counsellors,
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
+//assign-counsellor 
+app.post("/assign-counsellor", verifyToken, async (req, res) => {
+  try {
+    const { counsellingRequestId, counsellorId } = req.body;
+
+    // 1. Validate input
+    if (!counsellingRequestId || !counsellorId) {
+      return res.status(400).json({
+        success: false,
+        message: "Counselling request ID and counsellor ID are required",
+      });
+    }
+
+    // 2. Check logged-in admin
+    const admin = await User1.findById(req.userId).populate("role");
+
+    if (!admin) {
+      return res.status(404).json({
+        success: false,
+        message: "Admin not found",
+      });
+    }
+
+    const roleName =
+      typeof admin.role === "object"
+        ? admin.role?.roleName
+        : admin.role;
+
+    const normalizedRole = roleName?.toLowerCase().replace(/[\s_-]/g, "");
+
+    if (!["admin", "superadmin"].includes(normalizedRole)) {
+      return res.status(403).json({
+        success: false,
+        message: "Only admin can assign counsellor",
+      });
+    }
+
+    // 3. Check counselling request
+    const counsellingRequest = await CounsellingRequest.findById(
+      counsellingRequestId
+    );
+
+    if (!counsellingRequest) {
+      return res.status(404).json({
+        success: false,
+        message: "Counselling request not found",
+      });
+    }
+
+   // 4. Check counsellor
+const counsellor = await User1.findById(counsellorId).populate("role");
+
+if (!counsellor) {
+  return res.status(404).json({
+    success: false,
+    message: "Counsellor not found",
+  });
+}
+
+if (counsellor.status !== "active") {
+  return res.status(400).json({
+    success: false,
+    message: "Counsellor is not active",
+  });
+}
+
+const counsellorRole =
+  typeof counsellor.role === "object"
+    ? counsellor.role?.roleName
+    : counsellor.role;
+
+if (counsellorRole?.toLowerCase().trim() !== "counsellor") {
+  return res.status(400).json({
+    success: false,
+    message: "Selected user is not a counsellor",
+  });
+}
+
+    
+    // 5. Check existing active assignment
+    const existingAssignment = await CounsellingAssignment.findOne({
+      counsellingRequest: counsellingRequestId,
+      status: "active",
+    });
+
+    if (existingAssignment) {
+      // Same counsellor dobara assign ho raha hai
+      if (
+        existingAssignment.counsellor.toString() ===
+        counsellorId.toString()
+      ) {
+        return res.status(409).json({
+          success: false,
+          message: "This counsellor is already assigned",
+        });
+      }
+
+      // Different counsellor hai to old assignment close karo
+      existingAssignment.status = "reassigned";
+      existingAssignment.reassignedTo = counsellorId;
+      existingAssignment.reassignmentReason = "Reassigned by admin";
+      existingAssignment.endedAt = new Date();
+
+      await existingAssignment.save();
+    }
+
+    // 6. Create new assignment
+    const assignment = await CounsellingAssignment.create({
+      counsellingRequest: counsellingRequestId,
+      counsellor: counsellorId,
+      assignedBy: req.userId,
+      assignmentType: "manual",
+      status: "active",
+    });
+
+// 7. Update counselling request status
+counsellingRequest.status = "assigned";
+await counsellingRequest.save();
+
+    // 8. Send response
+    const populatedAssignment = await CounsellingAssignment.findById(
+      assignment._id
+    )
+      .populate("counsellingRequest")
+      .populate("counsellor", "name email")
+      .populate("assignedBy", "name email");
+
+    return res.status(201).json({
+      success: true,
+      message: "Counsellor assigned successfully",
+      data: populatedAssignment,
+    });
+
+  } catch (error) {
+    console.error("Assign Counsellor Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong",
+      error: error.message,
+    });
+  }
+});
+
+
+// START COUNSELLING
+app.put("/start-counselling/:id", verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // 1. Logged-in user find karo
+    const loggedInUser = await User1.findById(req.userId)
+      .populate("role");
+
+    if (!loggedInUser) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // 2. Role check
+    const roleName = loggedInUser.role?.roleName
+      ?.toLowerCase()
+      .replace(/[\s_-]/g, "");
+
+    if (!["admin", "superadmin", "counsellor"].includes(roleName)) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not authorized",
+      });
+    }
+
+    // 3. Counselling request find karo
+    const counsellingRequest = await CounsellingRequest.findById(id);
+
+    if (!counsellingRequest) {
+      return res.status(404).json({
+        success: false,
+        message: "Counselling request not found",
+      });
+    }
+
+    // 4. Counsellor ki active assignment check karo
+    if (roleName === "counsellor") {
+      const assignment = await CounsellingAssignment.findOne({
+        counsellingRequest: id,
+        counsellor: req.userId,
+        status: "active",
+      });
+
+      if (!assignment) {
+        return res.status(403).json({
+          success: false,
+          message: "This request is not assigned to you",
+        });
+      }
+    }
+
+    // 5. Current status check
+    if (counsellingRequest.status !== "assigned") {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot start counselling. Current status is ${counsellingRequest.status}`,
+      });
+    }
+
+    // 6. Update status
+    counsellingRequest.status = "in_progress";
+
+    await counsellingRequest.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Counselling started successfully",
+      data: counsellingRequest,
+    });
+
+  } catch (error) {
+    console.error("Start Counselling Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
+
+
+app.get("/counsellor/my-assignments", verifyToken, async (req, res) => {
+  try {
+    // 1. Logged-in user find karo
+    const loggedInUser = await User1.findById(req.userId)
+      .populate("role");
+
+    if (!loggedInUser) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // 2. Role check karo
+    const roleName = loggedInUser.role?.roleName
+      ?.toLowerCase()
+      .replace(/[\s_-]/g, "");
+
+    const allowedRoles = ["superadmin", "admin", "counsellor"];
+
+    if (!allowedRoles.includes(roleName)) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not authorized to access this data",
+      });
+    }
+
+    // 3. Role ke according query
+    let query = {
+      status: "active",
+    };
+
+    if (roleName === "counsellor") {
+      query.counsellor = req.userId;
+    }
+
+    // 4. Assignments fetch karo
+    const assignments = await CounsellingAssignment.find(query)
+      .populate({
+        path: "counsellingRequest",
+        populate: {
+          path: "student",
+          select: "name email phone",
+        },
+      })
+      .populate("counsellor", "name email")
+      .populate("assignedBy", "name email")
+      .sort({ assignedAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      message: "Assignments fetched successfully",
+      count: assignments.length,
+      data: assignments,
+    });
+
+  } catch (error) {
+    console.error("My Assignments Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
+
+
+app.get("/get-counselling-assignments", verifyToken, async (req, res) => {
+  try {
+    // 1. Logged-in user
+    const user = await User1.findById(req.userId).populate("role");
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // 2. Role check
+    const roleName =
+      typeof user.role === "object"
+        ? user.role?.roleName
+        : user.role;
+
+    const normalizedRole = roleName
+      ?.toLowerCase()
+      .replace(/[\s_-]/g, "");
+
+    if (!["admin", "superadmin", "counsellor"].includes(normalizedRole)) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not authorized to view assignments",
+      });
+    }
+
+    // 3. Counsellor can see only their own assignments
+    const filter = { status: "active" };
+
+    if (normalizedRole === "counsellor") {
+      filter.counsellor = req.userId;
+    }
+
+    // 4. Fetch assignments
+    const assignments = await CounsellingAssignment.find(filter)
+      .populate({
+        path: "counsellingRequest",
+        populate: [
+          { path: "student", select: "name email phone" },
+          { path: "preferredCourses", select: "name" },
+          { path: "preferredStreams", select: "name" },
+        ],
+      })
+      .populate("counsellor", "name email phone")
+      .populate("assignedBy", "name email")
+      .sort({ assignedAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      message: "Counselling assignments fetched successfully",
+      data: assignments,
+    });
+
+  } catch (error) {
+    console.error("Fetch Assignments Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong",
+      error: error.message,
+    });
+  }
+});
+
+
+app.put("/share-recommendations/:id", verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { colleges, courses, counsellorNote } = req.body;
+
+    // 1. Logged-in user check
+    const user = await User1.findById(req.userId).populate("role");
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const roleName = user.role?.roleName
+      ?.toLowerCase()
+      .replace(/[\s_-]/g, "");
+
+    if (roleName !== "counsellor") {
+      return res.status(403).json({
+        success: false,
+        message: "Only counsellors can share recommendations",
+      });
+    }
+
+    // 2. Validate input
+    if (
+      !Array.isArray(colleges) ||
+      !Array.isArray(courses) ||
+      (colleges.length === 0 && courses.length === 0)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Please select at least one college or course",
+      });
+    }
+
+    // 3. Find counselling request
+    const counsellingRequest = await CounsellingRequest.findById(id);
+
+    if (!counsellingRequest) {
+      return res.status(404).json({
+        success: false,
+        message: "Counselling request not found",
+      });
+    }
+
+    // 4. Check active assignment
+    const assignment = await CounsellingAssignment.findOne({
+      counsellingRequest: id,
+      counsellor: req.userId,
+      status: "active",
+    });
+
+    if (!assignment) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not assigned to this counselling request",
+      });
+    }
+
+    // 5. Check request status
+    if (counsellingRequest.status !== "in_progress") {
+      return res.status(400).json({
+        success: false,
+        message: "Recommendations can only be shared for in-progress requests",
+      });
+    }
+
+    // 6. Validate college IDs
+    const validColleges = await College.find({
+      _id: { $in: colleges },
+    }).select("_id");
+
+    if (validColleges.length !== new Set(colleges.map(String)).size) {
+      return res.status(400).json({
+        success: false,
+        message: "One or more college IDs are invalid",
+      });
+    }
+
+    // 7. Validate course IDs
+    const validCourses = await Course.find({
+      _id: { $in: courses },
+    }).select("_id");
+
+    if (validCourses.length !== new Set(courses.map(String)).size) {
+      return res.status(400).json({
+        success: false,
+        message: "One or more course IDs are invalid",
+      });
+    }
+
+    // 8. Save recommendations
+    counsellingRequest.recommendations = {
+      colleges,
+      courses,
+      counsellorNote: counsellorNote || "",
+      sharedAt: new Date(),
+      sharedBy: req.userId,
+    };
+
+    counsellingRequest.status = "recommendations_shared";
+
+    await counsellingRequest.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Recommendations shared successfully",
+      data: counsellingRequest,
+    });
+  } catch (error) {
+    console.error("Share Recommendations Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+});
+app.get("/get-courses-for-recommendations", verifyToken, async (req, res) => {
+  try {
+    const user = await User1.findById(req.userId).populate("role");
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const roleName = user.role?.roleName
+      ?.toLowerCase()
+      .replace(/[\s_-]/g, "");
+
+    if (!["counsellor", "admin", "superadmin"].includes(roleName)) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not authorized to view courses",
+      });
+    }
+
+    const courses = await Course.find({ status: "active" })
+      .populate("stream", "name")
+      .populate("degree", "name shortName")
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      count: courses.length,
+      courses,
+    });
+  } catch (error) {
+    console.error("Get Recommendation Courses Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
+app.get("/student/my-recommendations", verifyToken, async (req, res) => {
+  try {
+    // 1. Logged-in user find karo
+    const user = await User1.findById(req.userId).populate("role");
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // 2. Role check karo
+    const roleName = user.role?.roleName
+      ?.toLowerCase()
+      .replace(/[\s_-]/g, "");
+
+    if (roleName !== "student") {
+      return res.status(403).json({
+        success: false,
+        message: "Only students can view their recommendations",
+      });
+    }
+
+    // 3. Student ki shared recommendations find karo
+    const recommendations = await CounsellingRequest.find({
+      student: req.userId,
+      status: "recommendations_shared",
+    })
+      .populate("recommendations.colleges", "name logo location")
+      .populate("recommendations.courses", "name code duration")
+      .populate("recommendations.sharedBy", "name");
+
+    return res.status(200).json({
+      success: true,
+      count: recommendations.length,
+      message: "Student recommendations fetched successfully",
+      data: recommendations,
+    });
+
+  } catch (error) {
+    console.error("Student Recommendations Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
+app.get("/student/my-counselling-requests", verifyToken, async (req, res) => {
+  try {
+    // Logged-in student ki requests
+    const requests = await CounsellingRequest.find({
+      student: req.userId,
+    })
+      .populate("preferredStreams", "name")
+      .populate("preferredCourses", "name code")
+      .populate("recommendations.colleges", "name")
+      .populate("recommendations.courses", "name code")
+      .populate("recommendations.sharedBy", "name email")
+      .sort({ createdAt: -1 });
+
+    // Requests ke IDs
+    const requestIds = requests.map((request) => request._id);
+
+    // Active counsellor assignments
+    const assignments = await CounsellingAssignment.find({
+      counsellingRequest: { $in: requestIds },
+      status: "active",
+    }).populate("counsellor", "name firstName lastName email");
+
+    // Assignment ko request ID se map karna
+    const assignmentMap = {};
+
+    assignments.forEach((assignment) => {
+      assignmentMap[assignment.counsellingRequest.toString()] =
+        assignment.counsellor;
+    });
+
+    // Final response
+    const finalRequests = requests.map((request) => ({
+      ...request.toObject(),
+      assignedCounsellor:
+        assignmentMap[request._id.toString()] || null,
+    }));
+
+    return res.status(200).json({
+      success: true,
+      message: "Student counselling requests fetched successfully",
+      data: finalRequests,
+    });
+  } catch (error) {
+    console.error("My Counselling Requests Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch counselling requests",
+      error: error.message,
+    });
+  }
+});
+
+
+app.post("/create-appointment", verifyToken, async (req, res) => {
+  try {
+    const {
+      counsellingRequestId,
+      appointmentDate,
+      appointmentTime,
+      meetingMode,
+      meetingLink,
+      location,
+      purpose,
+    } = req.body;
+
+    // 1. Validate required fields
+    if (
+      !counsellingRequestId ||
+      !appointmentDate ||
+      !appointmentTime ||
+      !meetingMode
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide all required fields",
+      });
+    }
+
+    if (!["online", "offline"].includes(meetingMode)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid meeting mode",
+      });
+    }
+
+    if (meetingMode === "online" && !meetingLink) {
+      return res.status(400).json({
+        success: false,
+        message: "Meeting link is required for online appointments",
+      });
+    }
+
+    if (meetingMode === "offline" && !location) {
+      return res.status(400).json({
+        success: false,
+        message: "Location is required for offline appointments",
+      });
+    }
+
+    // 2. Get logged-in user
+    const user = await User1.findById(req.userId).populate("role");
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const roleName = user.role?.roleName
+      ?.toLowerCase()
+      .replace(/[\s_-]/g, "");
+
+    if (!["admin", "superadmin", "counsellor"].includes(roleName)) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not authorized to create appointments",
+      });
+    }
+
+    // 3. Find counselling request
+    const counsellingRequest = await CounsellingRequest.findById(
+      counsellingRequestId
+    );
+
+    if (!counsellingRequest) {
+      return res.status(404).json({
+        success: false,
+        message: "Counselling request not found",
+      });
+    }
+
+    // 4. Find active assignment
+    const assignment = await CounsellingAssignment.findOne({
+      counsellingRequest: counsellingRequestId,
+      status: "active",
+    });
+
+    if (!assignment) {
+      return res.status(400).json({
+        success: false,
+        message: "No active counsellor assigned to this request",
+      });
+    }
+
+    // 5. Counsellor can create appointment only for own assignment
+    if (
+      roleName === "counsellor" &&
+      assignment.counsellor.toString() !== req.userId
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "You can only create appointments for your assigned students",
+      });
+    }
+
+    // 6. Validate appointment date
+    const parsedDate = new Date(appointmentDate);
+
+    if (isNaN(parsedDate.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid appointment date",
+      });
+    }
+
+    // 7. Create appointment
+    const appointment = await Appointment.create({
+      appointmentNumber: `APT-${Date.now()}`,
+      counsellingRequest: counsellingRequestId,
+      student: counsellingRequest.student,
+      counsellor: assignment.counsellor,
+      appointmentDate: parsedDate,
+      appointmentTime,
+      meetingMode,
+      meetingLink: meetingMode === "online" ? meetingLink : "",
+      location: meetingMode === "offline" ? location : "",
+      purpose: purpose || "",
+      createdBy: req.userId,
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "Appointment created successfully",
+      data: appointment,
+    });
+  } catch (error) {
+    console.error("Create Appointment Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong",
+      error: error.message,
+    });
+  }
+});
+
+
+app.get("/student/my-appointments", verifyToken, async (req, res) => {
+  try {
+    const appointments = await Appointment.find({
+      student: req.userId,
+    })
+      .populate("counsellingRequest", "requestNumber status")
+      .populate("counsellor", "name email")
+      .sort({ appointmentDate: 1, appointmentTime: 1 });
+
+    return res.status(200).json({
+      success: true,
+      message: "Student appointments fetched successfully",
+      data: appointments,
+    });
+  } catch (error) {
+    console.error("Student Appointments Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to fetch appointments",
+      error: error.message,
+    });
+  }
+});
+
+
+app.put("/update-appointment-status/:id", verifyToken, async (req, res) => {
+  try {
+    const { status } = req.body;
+    const { id } = req.params;
+
+    // 1. Validate status
+    if (!["completed", "cancelled"].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: "Status must be completed or cancelled",
+      });
+    }
+
+    // 2. Find logged-in user
+    const user = await User1.findById(req.userId).populate("role");
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const roleName = user.role?.roleName
+      ?.toLowerCase()
+      .replace(/[\s_-]/g, "");
+
+    // 3. Check permissions
+    if (!["admin", "superadmin", "counsellor"].includes(roleName)) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not authorized to update appointments",
+      });
+    }
+
+    // 4. Find appointment
+    const appointment = await Appointment.findById(id);
+
+    if (!appointment) {
+      return res.status(404).json({
+        success: false,
+        message: "Appointment not found",
+      });
+    }
+
+    // 5. Counsellor can update only own appointments
+    if (
+      roleName === "counsellor" &&
+      appointment.counsellor.toString() !== req.userId
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "You can only update your own appointments",
+      });
+    }
+
+    // 6. Only scheduled appointments can be updated
+    if (appointment.status !== "scheduled") {
+      return res.status(400).json({
+        success: false,
+        message: `Appointment is already ${appointment.status}`,
+      });
+    }
+
+    // 7. Update status
+    appointment.status = status;
+
+    await appointment.save();
+
+    return res.status(200).json({
+      success: true,
+      message: `Appointment marked as ${status} successfully`,
+      data: appointment,
+    });
+  } catch (error) {
+    console.error("Update Appointment Status Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to update appointment status",
+      error: error.message,
+    });
+  }
+});
+
+
+app.get("/get-appointments", verifyToken, async (req, res) => {
+  try {
+    const user = await User1.findById(req.userId).populate("role");
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const roleName = user.role?.roleName
+      ?.toLowerCase()
+      .replace(/[\s_-]/g, "");
+
+    if (!["admin", "superadmin", "counsellor"].includes(roleName)) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not authorized to view appointments",
+      });
+    }
+    // Counsellor only sees own appointments
+    const filter =
+      roleName === "counsellor"
+        ? { counsellor: req.userId }
+        : {};
+
+    const appointments = await Appointment.find(filter)
+      .populate("student", "name email")
+      .populate("counsellor", "name email")
+      .populate("counsellingRequest", "requestNumber status")
+      .populate("createdBy", "name email")
+      .sort({ appointmentDate: 1, createdAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      message: "Appointments fetched successfully",
+      data: appointments,
+    });
+  } catch (error) {
+    console.error("Get Appointments Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to fetch appointments",
+      error: error.message,
+    });
+  }
+});
+
+
+app.put("/reschedule-appointment/:id", verifyToken, async (req, res) => {
+  try {
+    const {
+      appointmentDate,
+      appointmentTime,
+      meetingMode,
+      meetingLink,
+      location,
+      purpose,
+      notes,
+    } = req.body;
+
+    // 1. Logged-in user aur role check
+    const user = await User1.findById(req.userId).populate("role");
+
+    if (!user || !user.role) {
+      return res.status(401).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const roleName = user.role.roleName
+      ?.toLowerCase()
+      .replace(/[\s_-]/g, "");
+
+    if (!["admin", "superadmin", "counsellor"].includes(roleName)) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not authorized to reschedule appointments",
+      });
+    }
+
+    // 2. Required fields validation
+    if (!appointmentDate || !appointmentTime || !meetingMode) {
+      return res.status(400).json({
+        success: false,
+        message: "Appointment date, time and meeting mode are required",
+      });
+    }
+
+    if (!["online", "offline"].includes(meetingMode)) {
+      return res.status(400).json({
+        success: false,
+        message: "Meeting mode must be online or offline",
+      });
+    }
+
+    if (meetingMode === "online" && !meetingLink?.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Meeting link is required for online appointments",
+      });
+    }
+
+    if (meetingMode === "offline" && !location?.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Location is required for offline appointments",
+      });
+    }
+
+    // 3. Appointment find karo
+    const appointment = await Appointment.findById(req.params.id);
+
+    if (!appointment) {
+      return res.status(404).json({
+        success: false,
+        message: "Appointment not found",
+      });
+    }
+
+    // 4. Counsellor sirf apni appointment reschedule kar sakta hai
+    if (
+      roleName === "counsellor" &&
+      appointment.counsellor.toString() !== req.userId
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "You can only reschedule your own appointments",
+      });
+    }
+
+    // 5. Completed ya cancelled appointment reschedule nahi hogi
+    if (!["scheduled", "rescheduled"].includes(appointment.status)) {
+      return res.status(400).json({
+        success: false,
+        message: "Only scheduled appointments can be rescheduled",
+      });
+    }
+
+    // 6. Date validation
+    const parsedDate = new Date(appointmentDate);
+
+    if (isNaN(parsedDate.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid appointment date",
+      });
+    }
+
+    // 7. Save old appointment details in history
+appointment.rescheduleHistory.push({
+  oldAppointmentDate: appointment.appointmentDate,
+  oldAppointmentTime: appointment.appointmentTime,
+  oldMeetingMode: appointment.meetingMode,
+  oldMeetingLink: appointment.meetingLink,
+  oldLocation: appointment.location,
+  rescheduledAt: new Date(),
+  rescheduledBy: req.userId,
+});
+
+    // 8. Appointment update
+    appointment.appointmentDate = parsedDate;
+    appointment.appointmentTime = appointmentTime;
+    appointment.meetingMode = meetingMode;
+
+    appointment.meetingLink =
+      meetingMode === "online" ? meetingLink.trim() : "";
+
+    appointment.location =
+      meetingMode === "offline" ? location.trim() : "";
+
+    if (purpose !== undefined) {
+      appointment.purpose = purpose;
+    }
+
+    if (notes !== undefined) {
+      appointment.notes = notes;
+    }
+
+    appointment.status = "rescheduled";
+
+    await appointment.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Appointment rescheduled successfully",
+      data: appointment,
+    });
+  } catch (error) {
+    console.error("Reschedule Appointment Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong while rescheduling appointment",
+      error: error.message,
+    });
+  }
+});
+
+app.get("/appointment-reschedule-history/:id",
+  verifyToken,
+  async (req, res) => {
+    try {
+      const user = await User1.findById(req.userId).populate("role");
+
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: "User not found",
+        });
+      }
+
+      const roleName = user.role?.roleName
+        ?.toLowerCase()
+        .replace(/[\s_-]/g, "");
+
+      if (!["admin", "superadmin", "counsellor", "student"].includes(roleName)) {
+        return res.status(403).json({
+          success: false,
+          message: "Access denied",
+        });
+      }
+
+      const appointment = await Appointment.findById(req.params.id)
+        .populate("rescheduleHistory.rescheduledBy", "name email");
+
+      if (!appointment) {
+        return res.status(404).json({
+          success: false,
+          message: "Appointment not found",
+        });
+      }
+
+      // Student can only see their own appointment
+      if (
+        roleName === "student" &&
+        appointment.student.toString() !== req.userId
+      ) {
+        return res.status(403).json({
+          success: false,
+          message: "You can only view your own appointment history",
+        });
+      }
+
+      // Counsellor can only see their assigned appointments
+      if (
+        roleName === "counsellor" &&
+        appointment.counsellor.toString() !== req.userId
+      ) {
+        return res.status(403).json({
+          success: false,
+          message: "You can only view your assigned appointments",
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: "Appointment history fetched successfully",
+        data: appointment.rescheduleHistory || [],
+      });
+    } catch (error) {
+      console.error("Reschedule History Error:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Server error",
+        error: error.message,
+      });
+    }
+  }
+);
+
+app.post("/create-counselling-session", verifyToken, async (req, res) => {
+  try {
+    const {
+      appointmentId,
+      agenda,
+    } = req.body;
+
+    // 1. Validate appointment ID
+    if (!appointmentId) {
+      return res.status(400).json({
+        success: false,
+        message: "Appointment ID is required",
+      });
+    }
+
+    // 2. Check logged-in user
+    const user = await User1.findById(req.userId).populate("role");
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const roleName = user.role?.roleName
+      ?.toLowerCase()
+      .replace(/[\s_-]/g, "");
+
+    if (!["admin", "superadmin", "counsellor"].includes(roleName)) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not authorized to create counselling sessions",
+      });
+    }
+
+    // 3. Find appointment
+    const appointment = await Appointment.findById(appointmentId);
+
+    if (!appointment) {
+      return res.status(404).json({
+        success: false,
+        message: "Appointment not found",
+      });
+    }
+
+    // 4. Check appointment status
+    if (!["scheduled", "rescheduled"].includes(appointment.status)) {
+      return res.status(400).json({
+        success: false,
+        message: "Only scheduled or rescheduled appointments can have a session",
+      });
+    }
+
+    // 5. Counsellor can create only own appointment session
+    if (
+      roleName === "counsellor" &&
+      appointment.counsellor.toString() !== req.userId
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "You can only create sessions for your assigned appointments",
+      });
+    }
+
+    // 6. Check existing session
+    const existingSession = await CounsellingSession.findOne({
+      appointment: appointmentId,
+    });
+
+    if (existingSession) {
+      return res.status(400).json({
+        success: false,
+        message: "Counselling session already exists for this appointment",
+      });
+    }
+
+    // 7. Create session
+    const session = new CounsellingSession({
+      sessionNumber: `CS-${Date.now()}`,
+      appointment: appointment._id,
+      counsellingRequest: appointment.counsellingRequest,
+      student: appointment.student,
+      counsellor: appointment.counsellor,
+      sessionDate: appointment.appointmentDate,
+      meetingMode: appointment.meetingMode,
+      meetingLink: appointment.meetingLink,
+      location: appointment.location,
+      agenda: agenda || appointment.purpose || "",
+      status: "scheduled",
+      createdBy: req.userId,
+    });
+
+    await session.save();
+
+    return res.status(201).json({
+      success: true,
+      message: "Counselling session created successfully",
+      data: session,
+    });
+  } catch (error) {
+    console.error("Create Counselling Session Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+});
+
+app.put("/start-counselling-session/:id", verifyToken, async (req, res) => {
+  try {
+    // 1. Check user
+    const user = await User1.findById(req.userId).populate("role");
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const roleName = user.role?.roleName
+      ?.toLowerCase()
+      .replace(/[\s_-]/g, "");
+
+    // 2. Role validation
+    if (!["admin", "superadmin", "counsellor"].includes(roleName)) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not authorized to start this session",
+      });
+    }
+
+    // 3. Find session
+    const session = await CounsellingSession.findById(req.params.id);
+
+    if (!session) {
+      return res.status(404).json({
+        success: false,
+        message: "Counselling session not found",
+      });
+    }
+
+    // 4. Counsellor permission
+    if (
+      roleName === "counsellor" &&
+      session.counsellor.toString() !== req.userId
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "You can only start your assigned sessions",
+      });
+    }
+
+    // 5. Check session status
+    if (session.status !== "scheduled") {
+      return res.status(400).json({
+        success: false,
+        message: "Only scheduled sessions can be started",
+      });
+    }
+
+    // 6. Start session
+    session.status = "in_progress";
+    session.startedAt = new Date();
+    session.startTime = new Date().toLocaleTimeString("en-IN", {
+      timeZone: "Asia/Kolkata",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    await session.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Counselling session started successfully",
+      data: session,
+    });
+
+  } catch (error) {
+    console.error("Start Counselling Session Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+});
+
+app.put("/complete-counselling-session/:id", verifyToken, async (req, res) => {
+  try {
+    const {
+      discussion,
+      outcome,
+      nextSteps,
+    } = req.body;
+
+    // 1. Check logged-in user
+    const user = await User1.findById(req.userId).populate("role");
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const roleName = user.role?.roleName
+      ?.toLowerCase()
+      .replace(/[\s_-]/g, "");
+
+    // 2. Role validation
+    if (!["admin", "superadmin", "counsellor"].includes(roleName)) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not authorized to complete this session",
+      });
+    }
+
+    // 3. Find session
+    const session = await CounsellingSession.findById(req.params.id);
+
+    if (!session) {
+      return res.status(404).json({
+        success: false,
+        message: "Counselling session not found",
+      });
+    }
+
+    // 4. Counsellor permission
+    if (
+      roleName === "counsellor" &&
+      session.counsellor.toString() !== req.userId
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "You can only complete your assigned sessions",
+      });
+    }
+
+    // 5. Check session status
+    if (session.status !== "in_progress") {
+      return res.status(400).json({
+        success: false,
+        message: "Only in-progress sessions can be completed",
+      });
+    }
+
+    // 6. Validate start time
+    if (!session.startedAt) {
+      return res.status(400).json({
+        success: false,
+        message: "Session start time not found",
+      });
+    }
+
+    // 7. Calculate duration
+    const completedAt = new Date();
+
+    const durationMinutes = Math.max(
+      0,
+      Math.round(
+        (completedAt.getTime() - new Date(session.startedAt).getTime()) / 60000
+      )
+    );
+
+    // 8. Update session details
+    session.discussion = discussion || "";
+    session.outcome = outcome || "";
+    session.nextSteps = nextSteps || "";
+
+    session.status = "completed";
+    session.completedAt = completedAt;
+    session.durationMinutes = durationMinutes;
+
+    session.endTime = completedAt.toLocaleTimeString("en-IN", {
+      timeZone: "Asia/Kolkata",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    await session.save();
+
+    // 9. Update appointment status
+    await Appointment.findByIdAndUpdate(session.appointment, {
+      status: "completed",
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Counselling session completed successfully",
+      data: session,
+    });
+
+  } catch (error) {
+    console.error("Complete Counselling Session Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+});
+
+
+app.get("/get-counselling-sessions", verifyToken, async (req, res) => {
+  try {
+    // 1. Check logged-in user
+    const user = await User1.findById(req.userId).populate("role");
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const roleName = user.role?.roleName
+      ?.toLowerCase()
+      .replace(/[\s_-]/g, "");
+
+    // 2. Role-based filter
+    let filter = {};
+
+    if (roleName === "admin" || roleName === "superadmin") {
+      filter = {};
+    } else if (roleName === "counsellor") {
+      filter = {
+        counsellor: req.userId,
+      };
+    } else if (roleName === "student") {
+      filter = {
+        student: req.userId,
+      };
+    } else {
+      return res.status(403).json({
+        success: false,
+        message: "You are not authorized to access counselling sessions",
+      });
+    }
+
+    // 3. Fetch counselling sessions
+    const sessions = await CounsellingSession.find(filter)
+      .populate("appointment", "appointmentNumber appointmentDate appointmentTime status")
+      .populate("counsellingRequest", "requestNumber status")
+      .populate("student", "name email")
+      .populate("counsellor", "name email")
+      .populate("createdBy", "name email")
+      .sort({ createdAt: -1 });
+
+    // 4. Response
+    return res.status(200).json({
+      success: true,
+      message: "Counselling sessions fetched successfully",
+      total: sessions.length,
+      data: sessions,
+    });
+
+  } catch (error) {
+    console.error("Get Counselling Sessions Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+});
+
+
+app.post("/student/session-feedback/:sessionId",
+  verifyToken,
+  async (req, res) => {
+    try {
+      const { rating, feedback, suggestions } = req.body;
+      const { sessionId } = req.params;
+
+      if (!mongoose.isValidObjectId(sessionId)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid session ID",
+        });
+      }
+
+      const user = await User1.findById(req.userId).populate("role");
+
+      const roleName = user?.role?.roleName
+        ?.toLowerCase()
+        .replace(/[\s_-]/g, "");
+
+      if (roleName !== "student") {
+        return res.status(403).json({
+          success: false,
+          message: "Only students can submit feedback",
+        });
+      }
+
+      if (!Number.isInteger(Number(rating)) ||
+          Number(rating) < 1 ||
+          Number(rating) > 5) {
+        return res.status(400).json({
+          success: false,
+          message: "Rating must be between 1 and 5",
+        });
+      }
+
+      const session = await CounsellingSession.findById(sessionId);
+
+      if (!session) {
+        return res.status(404).json({
+          success: false,
+          message: "Counselling session not found",
+        });
+      }
+
+      if (String(session.student) !== String(req.userId)) {
+        return res.status(403).json({
+          success: false,
+          message: "You cannot submit feedback for this session",
+        });
+      }
+
+      if (session.status !== "completed") {
+        return res.status(400).json({
+          success: false,
+          message: "Feedback can only be submitted after session completion",
+        });
+      }
+
+      const existingFeedback = await SessionFeedback.findOne({
+        session: sessionId,
+      });
+
+      if (existingFeedback) {
+        return res.status(400).json({
+          success: false,
+          message: "Feedback already submitted for this session",
+        });
+      }
+
+      const newFeedback = await SessionFeedback.create({
+        session: sessionId,
+        student: req.userId,
+        counsellor: session.counsellor,
+        rating: Number(rating),
+        feedback: feedback || "",
+        suggestions: suggestions || "",
+      });
+
+      return res.status(201).json({
+        success: true,
+        message: "Session feedback submitted successfully",
+        data: newFeedback,
+      });
+    } catch (error) {
+      if (error.code === 11000) {
+        return res.status(400).json({
+          success: false,
+          message: "Feedback already submitted for this session",
+        });
+      }
+
+      console.error("Session feedback error:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+      });
+    }
+  }
+);
+
+app.get("/student/my-session-feedbacks",
+  verifyToken,
+  async (req, res) => {
+    try {
+      const user = await User1.findById(req.userId).populate("role");
+
+      const roleName = user?.role?.roleName
+        ?.toLowerCase()
+        .replace(/[\s_-]/g, "");
+
+      if (roleName !== "student") {
+        return res.status(403).json({
+          success: false,
+          message: "Only students can access this data",
+        });
+      }
+
+      const feedbacks = await SessionFeedback.find({
+        student: req.userId,
+      })
+        .populate("session")
+        .populate("counsellor", "name email")
+        .sort({ createdAt: -1 });
+
+      return res.status(200).json({
+        success: true,
+        message: "Session feedbacks fetched successfully",
+        total: feedbacks.length,
+        data: feedbacks,
+      });
+    } catch (error) {
+      console.error("Fetch feedback error:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+      });
+    }
+  }
+);
+
+
+
+app.post("/create-follow-up", verifyToken, async (req, res) => {
+  try {
+    const {
+      counsellingRequest,
+      title,
+      description,
+      dueAt,
+      type,
+    } = req.body;
+
+    // Required fields validation
+    if (!counsellingRequest || !title || !dueAt) {
+      return res.status(400).json({
+        success: false,
+        message: "Counselling request, title and due date are required",
+      });
+    }
+
+    // Validate MongoDB ID
+    if (!mongoose.Types.ObjectId.isValid(counsellingRequest)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid counselling request ID",
+      });
+    }
+
+    // Validate due date
+    const followUpDate = new Date(dueAt);
+
+    if (isNaN(followUpDate.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid follow-up date",
+      });
+    }
+
+    // Get logged-in user
+    const user = await User1.findById(req.userId).populate("role");
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const roleName = user.role?.roleName
+      ?.toLowerCase()
+      .replace(/[\s_-]/g, "");
+
+    if (!["admin", "superadmin", "counsellor"].includes(roleName)) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not authorized to create follow-ups",
+      });
+    }
+
+    // Find counselling request
+    const request = await CounsellingRequest.findById(
+      counsellingRequest
+    );
+
+    if (!request) {
+      return res.status(404).json({
+        success: false,
+        message: "Counselling request not found",
+      });
+    }
+
+    // Find active counsellor assignment
+    const assignment = await CounsellingAssignment.findOne({
+      counsellingRequest: request._id,
+      status: "active",
+    }).sort({ assignedAt: -1 });
+
+    if (!assignment) {
+      return res.status(404).json({
+        success: false,
+        message: "No active counsellor assigned to this request",
+      });
+    }
+
+    // Counsellor can create follow-up only for own assignment
+    if (
+      roleName === "counsellor" &&
+      assignment.counsellor.toString() !== req.userId.toString()
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "You can create follow-ups only for your assigned requests",
+      });
+    }
+
+    // Validate follow-up type
+    const allowedTypes = [
+      "call",
+      "email",
+      "document",
+      "appointment",
+      "other",
+    ];
+
+    const followUpType = type || "call";
+
+    if (!allowedTypes.includes(followUpType)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid follow-up type",
+      });
+    }
+
+    // Create follow-up
+    const followUp = await FollowUp.create({
+      counsellingRequest: request._id,
+      student: request.student,
+      assignedTo: assignment.counsellor,
+      createdBy: req.userId,
+      title: title.trim(),
+      description: description || "",
+      dueAt: followUpDate,
+      type: followUpType,
+    });
+
+    const populatedFollowUp = await FollowUp.findById(
+      followUp._id
+    )
+      .populate("counsellingRequest", "requestNumber status")
+      .populate("student", "name email")
+      .populate("assignedTo", "name email")
+      .populate("createdBy", "name email");
+
+    return res.status(201).json({
+      success: true,
+      message: "Follow-up created successfully",
+      data: populatedFollowUp,
+    });
+
+  } catch (error) {
+    console.error("Create Follow-up Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to create follow-up",
+      error: error.message,
+    });
+  }
+});
+
+
+app.put("/update-overdue-follow-ups", verifyToken, async (req, res) => {
+  try {
+    // Logged-in user find karo
+    const user = await User1.findById(req.userId).populate("role");
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // Role check
+    const roleName = user.role?.roleName
+      ?.toLowerCase()
+      .replace(/[\s_-]/g, "");
+
+    // Only Admin and SuperAdmin
+    if (!["admin", "superadmin"].includes(roleName)) {
+      return res.status(403).json({
+        success: false,
+        message: "Only Admin and SuperAdmin can update overdue follow-ups",
+      });
+    }
+
+    // Pending follow-ups jinki due date nikal chuki hai
+    const result = await FollowUp.updateMany(
+      {
+        status: "pending",
+        dueAt: { $lt: new Date() },
+      },
+      {
+        $set: {
+          status: "overdue",
+        },
+      }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Overdue follow-ups updated successfully",
+      totalUpdated: result.modifiedCount,
+    });
+
+  } catch (error) {
+    console.error("Update overdue follow-ups error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Server error while updating overdue follow-ups",
+      error: error.message,
+    });
+  }
+});
+
+
+app.get("/get-follow-ups", verifyToken, async (req, res) => {
+  try {
+    // Get logged-in user
+    const user = await User1.findById(req.userId).populate("role");
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const roleName = user.role?.roleName
+      ?.toLowerCase()
+      .replace(/[\s_-]/g, "");
+
+    // Role-based filter
+    let filter = {};
+
+    if (roleName === "admin" || roleName === "superadmin") {
+      // Admin and SuperAdmin can see all follow-ups
+      filter = {};
+    } else if (roleName === "counsellor") {
+      // Counsellor can see only assigned follow-ups
+      filter = {
+        assignedTo: req.userId,
+      };
+    } else if (roleName === "student") {
+      // Student can see only own follow-ups
+      filter = {
+        student: req.userId,
+      };
+    } else {
+      return res.status(403).json({
+        success: false,
+        message: "You are not authorized to view follow-ups",
+      });
+    }
+
+    // Fetch follow-ups
+    const followUps = await FollowUp.find(filter)
+      .populate("counsellingRequest", "requestNumber status")
+      .populate("student", "name email")
+      .populate("assignedTo", "name email")
+      .populate("createdBy", "name email")
+      .sort({ dueAt: 1 });
+
+    return res.status(200).json({
+      success: true,
+      message: "Follow-ups fetched successfully",
+      total: followUps.length,
+      data: followUps,
+    });
+
+  } catch (error) {
+    console.error("Get Follow-ups Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to fetch follow-ups",
+      error: error.message,
+    });
+  }
+});
+
+
+
+app.put("/update-follow-up/:id", verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title, description, dueAt, type } = req.body;
+
+    // Validate ID
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid follow-up ID",
+      });
+    }
+
+    // Get logged-in user
+    const user = await User1.findById(req.userId).populate("role");
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const roleName = user.role?.roleName
+      ?.toLowerCase()
+      .replace(/[\s_-]/g, "");
+
+    if (!["admin", "superadmin", "counsellor"].includes(roleName)) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not authorized to update follow-ups",
+      });
+    }
+
+    // Find follow-up
+    const followUp = await FollowUp.findById(id);
+
+    if (!followUp) {
+      return res.status(404).json({
+        success: false,
+        message: "Follow-up not found",
+      });
+    }
+
+    // Counsellor can update only assigned follow-ups
+    if (
+      roleName === "counsellor" &&
+      followUp.assignedTo.toString() !== req.userId.toString()
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "You can update only your assigned follow-ups",
+      });
+    }
+
+    // Only pending follow-ups can be updated
+    if (followUp.status !== "pending") {
+      return res.status(400).json({
+        success: false,
+        message: "Only pending follow-ups can be updated",
+      });
+    }
+
+    // Update title
+    if (title !== undefined) {
+      if (!title.trim()) {
+        return res.status(400).json({
+          success: false,
+          message: "Title cannot be empty",
+        });
+      }
+
+      followUp.title = title.trim();
+    }
+
+    // Update description
+    if (description !== undefined) {
+      followUp.description = description;
+    }
+
+    // Update due date
+    if (dueAt !== undefined) {
+      const newDueAt = new Date(dueAt);
+
+      if (isNaN(newDueAt.getTime())) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid due date",
+        });
+      }
+
+      followUp.dueAt = newDueAt;
+    }
+
+    // Update type
+    if (type !== undefined) {
+      const allowedTypes = [
+        "call",
+        "email",
+        "document",
+        "appointment",
+        "other",
+      ];
+
+      if (!allowedTypes.includes(type)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid follow-up type",
+        });
+      }
+
+      followUp.type = type;
+    }
+
+    await followUp.save();
+
+    const updatedFollowUp = await FollowUp.findById(id)
+      .populate("counsellingRequest", "requestNumber status")
+      .populate("student", "name email")
+      .populate("assignedTo", "name email")
+      .populate("createdBy", "name email");
+
+    return res.status(200).json({
+      success: true,
+      message: "Follow-up updated successfully",
+      data: updatedFollowUp,
+    });
+
+  } catch (error) {
+    console.error("Update Follow-up Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to update follow-up",
+      error: error.message,
+    });
+  }
+});
+
+
+
+app.put("/complete-follow-up/:id", verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { outcome } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid follow-up ID",
+      });
+    }
+
+    const user = await User1.findById(req.userId).populate("role");
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const roleName = user.role?.roleName
+      ?.toLowerCase()
+      .replace(/[\s_-]/g, "");
+
+    if (!["admin", "superadmin", "counsellor"].includes(roleName)) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not authorized to complete follow-ups",
+      });
+    }
+
+    const followUp = await FollowUp.findById(id);
+
+    if (!followUp) {
+      return res.status(404).json({
+        success: false,
+        message: "Follow-up not found",
+      });
+    }
+
+    if (
+      roleName === "counsellor" &&
+      followUp.assignedTo.toString() !== req.userId.toString()
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "You can complete only your assigned follow-ups",
+      });
+    }
+
+    if (followUp.status !== "pending") {
+      return res.status(400).json({
+        success: false,
+        message: "Only pending follow-ups can be completed",
+      });
+    }
+
+    followUp.status = "completed";
+    followUp.completedAt = new Date();
+    followUp.outcome = outcome || "";
+
+    await followUp.save();
+
+    const completedFollowUp = await FollowUp.findById(id)
+      .populate("counsellingRequest", "requestNumber status")
+      .populate("student", "name email")
+      .populate("assignedTo", "name email")
+      .populate("createdBy", "name email");
+
+    return res.status(200).json({
+      success: true,
+      message: "Follow-up completed successfully",
+      data: completedFollowUp,
+    });
+
+  } catch (error) {
+    console.error("Complete Follow-up Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to complete follow-up",
+      error: error.message,
+    });
+  }
+});
+
+
+
 
 //server
 app.listen(port, () => {
