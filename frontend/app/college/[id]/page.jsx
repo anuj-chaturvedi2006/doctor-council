@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState,Suspense } from "react";
 import axios from "axios";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -240,7 +240,7 @@ const ContactCard = ({ icon: Icon, label, children, empty, className = "" }) => 
 
 /* ---------- Page ---------- */
 
-export default function CollegeDetails() {
+function CollegeDetailsContent() {
   const params = useParams();
   const id = params.id;
 
@@ -502,5 +502,19 @@ const phone = getText(college.contact?.phone || college.contactNumber);
         )}
       </div>
     </div>
+  );
+}
+
+export default function CollegeDetails() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center">
+          Loading college details...
+        </div>
+      }
+    >
+      <CollegeDetailsContent />
+    </Suspense>
   );
 }

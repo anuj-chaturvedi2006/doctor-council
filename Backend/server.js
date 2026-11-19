@@ -13,7 +13,7 @@ const path = require("path");
 const fs = require("fs");
 const XLSX = require("xlsx");
 const razorpay = require("./middleware/rozarpay");
-const port = 2002;
+const port = process.env.PORT;
 const verifyToken = require("./middleware/auth");
 const checkPermission = require("./middleware/permission");
 const requireRoleFactory = require("./middleware/requireRole");
@@ -6563,6 +6563,7 @@ app.post("/student/counselling-request", verifyToken, async (req, res) => {
       entranceExams,
       counsellingMode,
       preferredTime,
+      requestDescription
     } = req.body;
 
     if (!academicYear || !admissionLevel) {

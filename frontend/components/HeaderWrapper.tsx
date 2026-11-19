@@ -1,15 +1,14 @@
 
 "use client";
 
+import { Suspense } from "react";
 import { usePathname } from "next/navigation";
 import Header from "./header";
 
-export default function HeaderWrapper() {
+function HeaderWrapperContent() {
   const pathname = usePathname();
 
-  const hideHeaderRoutes = [
-    "/user-profile",
-  ];
+  const hideHeaderRoutes = ["/user-profile"];
 
   const shouldHideHeader = hideHeaderRoutes.some(
     (route) =>
@@ -21,4 +20,12 @@ export default function HeaderWrapper() {
   }
 
   return <Header />;
+}
+
+export default function HeaderWrapper() {
+  return (
+    <Suspense fallback={null}>
+      <HeaderWrapperContent />
+    </Suspense>
+  );
 }

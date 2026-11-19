@@ -154,7 +154,7 @@ const visibleMenuItems = menuItems.map((item) => {
         </div>
 
         {/* Sidebar Menu */}
-        <div className="flex-1 overflow-y-auto px-3 py-5">
+        <div className="flex-1 overflow-y-auto px-3 py-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <p className="mb-3 px-3 text-xs font-semibold uppercase tracking-wider text-gray-500">
             Main Menu
           </p>

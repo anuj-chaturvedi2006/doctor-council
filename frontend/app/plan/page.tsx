@@ -1,35 +1,82 @@
+
 "use client";
+
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
-const API_URL = "http://localhost:2002";
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
+// ================= TYPES =================
+
+interface Package {
+  _id: string;
+  name: string;
+  description?: string;
+  price: number;
+  durationDays: number;
+  features: string[];
+  status: string;
+}
+
+interface PackageOrder {
+  key: string;
+  orderId: string;
+  amount: number;
+  currency: string;
+  packageName: string;
+}
+
+
+
+
+// ================= ERROR HANDLER =================
+
+const getErrorMessage = (
+  error: unknown,
+  fallback: string,
+): string => {
+  if (axios.isAxiosError(error)) {
+    return error.response?.data?.message || fallback;
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return fallback;
+};
+
+// ================= COMPONENT =================
 
 const Plan = () => {
-  const [packages, setPackages] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [selectedPackage, setSelectedPackage] = useState(null);
+  const [packages, setPackages] = useState<Package[]>([]);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [selectedPackage, setSelectedPackage] = useState<string | null>(null);
+  const [token, setToken] = useState<string>("");
 
-  const [token, setToken] = useState("");
-
+  // Get Login Token
   useEffect(() => {
     const savedToken = localStorage.getItem("token");
     setToken(savedToken || "");
   }, []);
-  
-  // Fetch Packages
-  const fetchPackages = async () => {
+
+  // ================= FETCH PACKAGES =================
+
+  const fetchPackages = async (): Promise<void> => {
     try {
       setLoading(true);
 
       const res = await axios.get(`${API_URL}/get-packages`);
 
       if (res.data.success) {
-        setPackages(res.data.data || []);
+        setPackages((res.data.data || []) as Package[]);
       }
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Unable to fetch packages");
+    } catch (error: unknown) {
+      toast.error(
+        getErrorMessage(error, "Unable to fetch packages"),
+      );
     } finally {
       setLoading(false);
     }
@@ -39,8 +86,9 @@ const Plan = () => {
     fetchPackages();
   }, []);
 
-  // Load Razorpay Script
-  const loadRazorpay = () => {
+  // ================= LOAD RAZORPAY SCRIPT =================
+
+  const loadRazorpay = (): Promise<boolean> => {
     return new Promise((resolve) => {
       if (window.Razorpay) {
         resolve(true);
@@ -48,17 +96,24 @@ const Plan = () => {
       }
 
       const script = document.createElement("script");
+
       script.src = "https://checkout.razorpay.com/v1/checkout.js";
 
-      script.onload = () => resolve(true);
-      script.onerror = () => resolve(false);
+      script.onload = () => {
+        resolve(!!window.Razorpay);
+      };
+
+      script.onerror = () => {
+        resolve(false);
+      };
 
       document.body.appendChild(script);
     });
   };
 
-  // Buy Package
-  const handleBuyPackage = async (pkg) => {
+  // ================= BUY PACKAGE =================
+
+  const handleBuyPackage = async (pkg: Package): Promise<void> => {
     try {
       if (!token) {
         toast.error("Please login first");
@@ -69,7 +124,7 @@ const Plan = () => {
 
       const loaded = await loadRazorpay();
 
-      if (!loaded) {
+      if (!loaded || !window.Razorpay) {
         toast.error("Razorpay SDK failed to load");
         return;
       }
@@ -88,21 +143,24 @@ const Plan = () => {
       );
 
       if (!orderRes.data.success) {
-        toast.error(orderRes.data.message || "Order creation failed");
+        toast.error(
+          orderRes.data.message || "Order creation failed",
+        );
         return;
       }
 
-      const order = orderRes.data.data;
+      const order = orderRes.data.data as PackageOrder;
 
       console.log("BACKEND ORDER RESPONSE:", order);
-console.log("ORDER ID:", order.orderId);
-console.log("RAZORPAY KEY:", order.key);
+      console.log("ORDER ID:", order.orderId);
+      console.log("RAZORPAY KEY:", order.key);
 
       if (!order.key || !order.orderId || !order.amount) {
         throw new Error("Razorpay order details are missing");
       }
 
-      const options = {
+      // Razorpay Checkout Options
+      const options: RazorpayOptions = {
         key: order.key,
         amount: order.amount,
         currency: order.currency,
@@ -110,7 +168,8 @@ console.log("RAZORPAY KEY:", order.key);
         description: order.packageName,
         order_id: order.orderId,
 
-        handler: async function (response) {
+        // Payment Success Handler
+        handler: async (response: RazorpayResponse) => {
           console.log("RAZORPAY FULL RESPONSE:", response);
 
           if (
@@ -118,8 +177,15 @@ console.log("RAZORPAY KEY:", order.key);
             !response.razorpay_payment_id ||
             !response.razorpay_signature
           ) {
-            console.error("Incomplete payment response:", response);
-            toast.error("Payment response incomplete. Contact support.");
+            console.error(
+              "Incomplete payment response:",
+              response,
+            );
+
+            toast.error(
+              "Payment response incomplete. Contact support.",
+            );
+
             return;
           }
 
@@ -142,48 +208,78 @@ console.log("RAZORPAY KEY:", order.key);
             console.log("VERIFY RESPONSE:", verifyRes.data);
 
             if (verifyRes.data.success) {
-              toast.success("Payment successful! Your package is activated.");
-              fetchPackages();
+              toast.success(
+                "Payment successful! Your package is activated.",
+              );
+
+              await fetchPackages();
+            } else {
+              toast.error(
+                verifyRes.data.message ||
+                  "Payment verification failed",
+              );
             }
-          } catch (error) {
-            console.error("VERIFY ERROR:", error.response?.data || error);
+          } catch (error: unknown) {
+            console.error(
+              "VERIFY ERROR:",
+              axios.isAxiosError(error)
+                ? error.response?.data || error.message
+                : error,
+            );
+
             toast.error(
-              error.response?.data?.message || "Payment verification failed",
+              getErrorMessage(
+                error,
+                "Payment verification failed",
+              ),
             );
           }
         },
 
         prefill: {},
+
         theme: {
           color: "#2563eb",
         },
 
         modal: {
-          ondismiss: function () {
+          ondismiss: () => {
             toast.info("Payment window closed");
           },
         },
       };
 
+      // Open Razorpay Checkout
       const razorpay = new window.Razorpay(options);
 
-      razorpay.on("payment.failed", function (response) {
-        toast.error(response.error?.description || "Payment failed");
-      });
+      razorpay.on(
+        "payment.failed",
+        (response: RazorpayFailedResponse) => {
+          toast.error(
+            response.error?.description || "Payment failed",
+          );
+        },
+      );
 
       razorpay.open();
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Something went wrong");
+    } catch (error: unknown) {
+      toast.error(
+        getErrorMessage(error, "Something went wrong"),
+      );
     } finally {
       setSelectedPackage(null);
     }
   };
+
+  // ================= UI =================
 
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-12 sm:px-8">
       <ToastContainer position="top-right" />
 
       <div className="mx-auto max-w-7xl">
+
+        {/* Header */}
         <div className="mb-12 text-center">
           <span className="rounded-full bg-blue-100 px-4 py-2 text-sm font-semibold text-blue-700">
             MBBS ADMISSION COUNSELLING
@@ -199,16 +295,20 @@ console.log("RAZORPAY KEY:", order.key);
           </p>
         </div>
 
+        {/* Packages */}
         {loading ? (
           <div className="py-16 text-center text-lg font-semibold text-slate-600">
             Loading packages...
           </div>
-        ) : packages.length === 0 ? (
+        ) : packages.filter((pkg) => pkg.status === "active").length === 0 ? (
           <div className="rounded-xl bg-white p-10 text-center shadow">
             <h2 className="text-xl font-bold text-slate-800">
               No Packages Available
             </h2>
-            <p className="mt-2 text-slate-500">Please check back later.</p>
+
+            <p className="mt-2 text-slate-500">
+              Please check back later.
+            </p>
           </div>
         ) : (
           <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
@@ -241,6 +341,7 @@ console.log("RAZORPAY KEY:", order.key);
                     <span className="text-4xl font-extrabold text-slate-900">
                       ₹{pkg.price}
                     </span>
+
                     <span className="ml-2 text-sm text-slate-500">
                       / {pkg.durationDays} Days
                     </span>
@@ -252,15 +353,20 @@ console.log("RAZORPAY KEY:", order.key);
                     </h3>
 
                     <ul className="space-y-3">
-                      {(pkg.features || []).map((feature, i) => (
-                        <li
-                          key={i}
-                          className="flex items-start gap-3 text-sm text-slate-600"
-                        >
-                          <span className="font-bold text-green-600">✓</span>
-                          {feature}
-                        </li>
-                      ))}
+                      {(pkg.features || []).map(
+                        (feature, i) => (
+                          <li
+                            key={i}
+                            className="flex items-start gap-3 text-sm text-slate-600"
+                          >
+                            <span className="font-bold text-green-600">
+                              ✓
+                            </span>
+
+                            {feature}
+                          </li>
+                        ),
+                      )}
                     </ul>
                   </div>
 
@@ -273,15 +379,19 @@ console.log("RAZORPAY KEY:", order.key);
                         : "bg-blue-600 hover:bg-blue-700"
                     }`}
                   >
-                    {selectedPackage === pkg._id ? "Processing..." : "Buy Now"}
+                    {selectedPackage === pkg._id
+                      ? "Processing..."
+                      : "Buy Now"}
                   </button>
                 </div>
               ))}
           </div>
         )}
 
+        {/* Footer */}
         <div className="mt-12 text-center text-sm text-slate-500">
           <p>Secure payments powered by Razorpay.</p>
+
           <p className="mt-2">
             Get expert support throughout your MBBS admission journey.
           </p>

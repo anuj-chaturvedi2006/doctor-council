@@ -127,6 +127,12 @@ const counsellingRequestSchema = new mongoose.Schema(
       },
     },
 
+    requestDescription: {
+  type: String,
+  default: "",
+  trim: true,
+},
+
     source: {
       type: String,
       enum: ["website", "organic", "referral", "campaign", "college", "other"],

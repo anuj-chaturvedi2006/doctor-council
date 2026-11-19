@@ -33,14 +33,18 @@ export default function InquiryForm() {
 
   const [loading, setLoading] = useState(false);
 
-  const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
-  };
+  const handleChange = (
+  e: React.ChangeEvent<
+    HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+  >
+) => {
+  setFormData({
+    ...formData,
+    [e.target.name]: e.target.value,
+  });
+};
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
     try {
@@ -65,11 +69,16 @@ export default function InquiryForm() {
       } else {
         toast.error(res.data.message);
       }
-    } catch (err) {
-      toast.error(
-        err.response?.data?.message || "Something went wrong"
-      );
-    } finally {
+    } catch (err: unknown) {
+  const message =
+    axios.isAxiosError(err)
+      ? err.response?.data?.message || "Something went wrong"
+      : err instanceof Error
+        ? err.message
+        : "Something went wrong";
+
+  toast.error(message);
+} finally {
       setLoading(false);
     }
   };

@@ -116,6 +116,14 @@ type EntranceExam = {
 
 type StreamOption = { _id: string; name?: string; streamName?: string };
 type CourseOption = { _id: string; name?: string; courseName?: string };
+type MultiSelectProps = {
+  label: string;
+  placeholder: string;
+  options?: (StreamOption | CourseOption)[];
+  value?: string[];
+  onChange: (value: string[]) => void;
+  icon?: ElementType;
+};
 type CounsellingForm = {
   academicYear: string;
   admissionLevel: string;
@@ -135,7 +143,18 @@ type CounsellingForm = {
   preferredDate: string;
 };
 
+const authConfig = () => ({
+  headers: {
+    Authorization: `Bearer ${
+      typeof window !== "undefined"
+        ? localStorage.getItem("token") || ""
+        : ""
+    }`,
+  },
+});
+
 const API_FALLBACK = "http://localhost:2002";
+
 const emptyCounsellingForm: CounsellingForm = {
   academicYear: "",
   admissionLevel: "UG",
@@ -236,6 +255,7 @@ function SectionHeading({
 
 
 
+
 const MultiSelect = ({
   label,
   placeholder,
@@ -243,15 +263,17 @@ const MultiSelect = ({
   value = [],
   onChange,
   icon: Icon,
-}) => {
+}: MultiSelectProps) => {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const wrapperRef = useRef(null);
+
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    const handleClickOutside = (event) => {
+    const handleClickOutside = (event: MouseEvent) => {
       if (
         wrapperRef.current &&
+        event.target instanceof Node &&
         !wrapperRef.current.contains(event.target)
       ) {
         setOpen(false);
@@ -261,24 +283,29 @@ const MultiSelect = ({
     document.addEventListener("mousedown", handleClickOutside);
 
     return () => {
-      document.removeEventListener(
-        "mousedown",
-        handleClickOutside
-      );
+      document.removeEventListener("mousedown", handleClickOutside);
     };
   }, []);
 
+const getOptionName = (option: StreamOption | CourseOption): string => {
+  return (
+    option.name ||
+    ("streamName" in option ? option.streamName : "") ||
+    ("courseName" in option ? option.courseName : "") ||
+    ""
+  );
+};
   const selectedOptions = options.filter((option) =>
     value.includes(option._id)
   );
 
   const filteredOptions = options.filter((option) =>
-    (option.name || option.streamName || option.courseName || "")
+    getOptionName(option)
       .toLowerCase()
       .includes(search.toLowerCase())
   );
 
-  const toggleOption = (id) => {
+  const toggleOption = (id: string) => {
     if (value.includes(id)) {
       onChange(value.filter((item) => item !== id));
     } else {
@@ -286,18 +313,16 @@ const MultiSelect = ({
     }
   };
 
-  const removeOption = (id) => {
+  const removeOption = (id: string) => {
     onChange(value.filter((item) => item !== id));
   };
 
   return (
     <div className="relative" ref={wrapperRef}>
-
       <label className="mb-2 block text-sm font-semibold text-slate-700">
         {label}
       </label>
 
-      {/* DROPDOWN TRIGGER */}
       <button
         type="button"
         onClick={() => setOpen(!open)}
@@ -322,7 +347,6 @@ const MultiSelect = ({
         />
       </button>
 
-      {/* SELECTED CHIPS */}
       {selectedOptions.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-2">
           {selectedOptions.map((option) => (
@@ -330,7 +354,7 @@ const MultiSelect = ({
               key={option._id}
               className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700"
             >
-              {option.name || option.streamName || option.courseName}
+              {getOptionName(option)}
 
               <button
                 type="button"
@@ -344,11 +368,8 @@ const MultiSelect = ({
         </div>
       )}
 
-      {/* DROPDOWN */}
       {open && (
         <div className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
-
-          {/* SEARCH */}
           <div className="border-b border-slate-100 p-3">
             <div className="flex items-center gap-2 rounded-xl border border-slate-200 px-3">
               <Search size={17} className="text-slate-400" />
@@ -356,7 +377,9 @@ const MultiSelect = ({
               <input
                 type="text"
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  setSearch(e.target.value)
+                }
                 placeholder="Search here..."
                 className="w-full border-0 bg-transparent py-3 text-sm outline-none focus:ring-0"
               />
@@ -372,9 +395,7 @@ const MultiSelect = ({
             </div>
           </div>
 
-          {/* OPTIONS */}
           <div className="max-h-52 overflow-y-auto p-2">
-
             {filteredOptions.length > 0 ? (
               filteredOptions.map((option) => {
                 const selected = value.includes(option._id);
@@ -391,9 +412,7 @@ const MultiSelect = ({
                     }`}
                   >
                     <span className="font-medium">
-                      {option.name ||
-                        option.streamName ||
-                        option.courseName}
+                      {getOptionName(option)}
                     </span>
 
                     <span
@@ -413,10 +432,8 @@ const MultiSelect = ({
                 No options found.
               </p>
             )}
-
           </div>
 
-          {/* FOOTER */}
           <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3">
             <span className="text-xs text-slate-500">
               {value.length} selected
@@ -433,13 +450,12 @@ const MultiSelect = ({
               Clear All
             </button>
           </div>
-
         </div>
       )}
-
     </div>
   );
 };
+
 
 
 export default function UserProfile() {
@@ -502,8 +518,8 @@ export default function UserProfile() {
   const [streams, setStreams] = useState<StreamOption[]>([]);
   const [courses, setCourses] = useState<CourseOption[]>([]);
   const [loadingOptions, setLoadingOptions] = useState(false);
-  const [counsellingForm, setCounsellingForm] =
-    useState<CounsellingForm>(emptyCounsellingForm);
+
+  const [counsellingForm, setCounsellingForm] = useState<CounsellingForm>(emptyCounsellingForm);
 
   const [myRequests, setMyRequests] = useState<any[]>([]);
   const [requestsLoading, setRequestsLoading] = useState(false);
@@ -526,11 +542,8 @@ export default function UserProfile() {
   const [historyError, setHistoryError] = useState("");
   const [selectedHistoryId, setSelectedHistoryId] = useState("");
 
-  const token =
-    typeof window !== "undefined" ? localStorage.getItem("token") : null;
-  const authConfig = () => ({
-    headers: { Authorization: `Bearer ${localStorage.getItem("token") || ""}` },
-  });
+ 
+
   const studentName = user?.name || profile?.student?.name || "Student";
   const studentEmail = user?.email || profile?.student?.email || "";
 
@@ -549,19 +562,19 @@ export default function UserProfile() {
       pincode: p?.address?.pincode || "",
     });
     const a = p?.academicDetails || {};
-    setAcademicForm({
-      course: a.course || "",
-      college: a.college || "",
-      university: a.university || "",
-      stream: a.stream || "",
-      admissionYear: a.admissionYear || "",
-      semester: a.semester || "",
-      enrollmentNumber: a.enrollmentNumber || "",
-      qualification: a.qualification || "",
-      board: a.board || "",
-      passingYear: a.passingYear || "",
-      percentage: a.percentage || "",
-    });
+   setAcademicForm({
+  course: String(a.course ?? ""),
+  college: String(a.college ?? ""),
+  university: String(a.university ?? ""),
+  stream: String(a.stream ?? ""),
+  admissionYear: String(a.admissionYear ?? ""),
+  semester: String(a.semester ?? ""),
+  enrollmentNumber: String(a.enrollmentNumber ?? ""),
+  qualification: String(a.qualification ?? ""),
+  board: String(a.board ?? ""),
+  passingYear: String(a.passingYear ?? ""),
+  percentage: String(a.percentage ?? ""),
+});
   };
 
   const getProfile = useCallback(async () => {
@@ -877,69 +890,154 @@ const openCounsellingModal = async () => {
 };
 
 
-  const handleCounsellingSubmit = async () => {
-    const min = Number(counsellingForm.minBudget || 0);
-    const max = Number(counsellingForm.maxBudget || 0);
-    if (counsellingForm.minBudget && counsellingForm.maxBudget && min > max) {
-      alert("Minimum budget cannot exceed maximum budget.");
+
+
+const handleCounsellingSubmit = async () => {
+  try {
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      alert("Please login first");
       return;
     }
-    if (!counsellingForm.academicYear || !counsellingForm.preferredDate) {
-      alert("Please enter academic year and preferred date.");
+
+    if (
+      !counsellingForm.academicYear.trim() ||
+      !counsellingForm.admissionLevel
+    ) {
+      alert("Academic Year and Admission Level are required");
       return;
     }
-    const payload: any = {
-      academicYear: counsellingForm.academicYear,
+
+    const minBudget = Number(counsellingForm.minBudget || 0);
+    const maxBudget = Number(counsellingForm.maxBudget || 0);
+
+    if (
+      !Number.isFinite(minBudget) ||
+      !Number.isFinite(maxBudget) ||
+      minBudget < 0 ||
+      maxBudget < 0
+    ) {
+      alert("Please enter a valid budget");
+      return;
+    }
+
+    if (maxBudget > 0 && minBudget > maxBudget) {
+      alert("Maximum budget must be greater than minimum budget");
+      return;
+    }
+
+    const entranceExams = counsellingForm.examName.trim()
+      ? [
+          {
+            examName: counsellingForm.examName.trim(),
+            year: counsellingForm.examYear
+              ? Number(counsellingForm.examYear)
+              : null,
+            score: counsellingForm.score
+              ? Number(counsellingForm.score)
+              : null,
+            percentile: counsellingForm.percentile
+              ? Number(counsellingForm.percentile)
+              : null,
+            rank: counsellingForm.rank
+              ? Number(counsellingForm.rank)
+              : null,
+          },
+        ]
+      : [];
+
+let preferredDate: string | null = null;
+
+    if (counsellingForm.preferredDate) {
+      const parsedDate = new Date(counsellingForm.preferredDate);
+
+      if (Number.isNaN(parsedDate.getTime())) {
+        alert("Please select a valid preferred date");
+        return;
+      }
+
+      preferredDate = parsedDate.toISOString();
+    }
+
+    const payload = {
+      academicYear: counsellingForm.academicYear.trim(),
       admissionLevel: counsellingForm.admissionLevel,
+
       preferredStreams: counsellingForm.preferredStreams,
       preferredCourses: counsellingForm.preferredCourses,
-      preferredLocations: counsellingForm.city
-        ? [
-            {
-              city: counsellingForm.city,
-              state: counsellingForm.state,
-              country: counsellingForm.country,
-            },
-          ]
-        : [],
-      budget: { min, max, currency: "INR" },
-      entranceExams: counsellingForm.examName
-        ? [
-            {
-              examName: counsellingForm.examName,
-              year: counsellingForm.examYear,
-              obtainedMarks: counsellingForm.score,
-              percentile: counsellingForm.percentile,
-              AIR: counsellingForm.rank,
-            },
-          ]
-        : [],
+
+      preferredLocations:
+        counsellingForm.city.trim() ||
+        counsellingForm.state.trim()
+          ? [
+              {
+                city: counsellingForm.city.trim(),
+                state: counsellingForm.state.trim(),
+                country: counsellingForm.country.trim() || "India",
+              },
+            ]
+          : [],
+
+      budget: {
+        min: minBudget,
+        max: maxBudget,
+        currency: "INR",
+      },
+
+      entranceExams,
+
       counsellingMode: counsellingForm.counsellingMode,
+
       preferredTime: {
-        date: counsellingForm.preferredDate,
+        date: preferredDate,
         timezone: "Asia/Kolkata",
       },
     };
-    try {
-      setSavingCounselling(true);
-      await axios.post(
-        `${apiUrl}/student/counselling-request`,
-        payload,
-        authConfig(),
-      );
+
+    setSavingCounselling(true);
+
+    const response = await axios.post(
+     `${apiUrl}/student/counselling-request`,
+      payload,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    if (response.data.success) {
+      alert("Counselling request submitted successfully!");
+
       setCounsellingModalOpen(false);
-      setCounsellingForm(emptyCounsellingForm);
-      alert("Counselling request submitted successfully.");
-      if (activeTab === "requests") fetchMyRequests();
-    } catch (e: any) {
-      alert(
-        e?.response?.data?.message ||
-          "Counselling request could not be submitted.",
-      );
-    } finally {
-      setSavingCounselling(false);
+      setCounsellingForm({ ...emptyCounsellingForm });
+
+      // Refresh student requests if this function exists
+      if (typeof fetchMyRequests === "function") {
+        await fetchMyRequests();
+      }
+    } else {
+      alert(response.data.message || "Failed to submit request");
     }
-  };
+
+  } catch (error: any) {
+    console.error(
+      "Counselling Request Error:",
+      error.response?.data || error
+    );
+
+    alert(
+      error.response?.data?.message ||
+      "Something went wrong while submitting request"
+    );
+  } finally {
+    setSavingCounselling(false);
+  }
+};
+
+
 
   const fetchRescheduleHistory = async (appointmentId: string) => {
     try {
@@ -1001,23 +1099,26 @@ const openCounsellingModal = async () => {
     });
     setEditingPersonal(false);
   };
+ 
   const cancelAcademic = () => {
-    const a = profile?.academicDetails || {};
-    setAcademicForm({
-      course: a.course || "",
-      college: a.college || "",
-      university: a.university || "",
-      stream: a.stream || "",
-      admissionYear: a.admissionYear || "",
-      semester: a.semester || "",
-      enrollmentNumber: a.enrollmentNumber || "",
-      qualification: a.qualification || "",
-      board: a.board || "",
-      passingYear: a.passingYear || "",
-      percentage: a.percentage || "",
-    });
-    setEditingAcademic(false);
-  };
+  const a = profile?.academicDetails || {};
+
+  setAcademicForm({
+    course: String(a.course ?? ""),
+    college: String(a.college ?? ""),
+    university: String(a.university ?? ""),
+    stream: String(a.stream ?? ""),
+    admissionYear: String(a.admissionYear ?? ""),
+    semester: String(a.semester ?? ""),
+    enrollmentNumber: String(a.enrollmentNumber ?? ""),
+    qualification: String(a.qualification ?? ""),
+    board: String(a.board ?? ""),
+    passingYear: String(a.passingYear ?? ""),
+    percentage: String(a.percentage ?? ""),
+  });
+
+  setEditingAcademic(false);
+};
 
   const navItems: {
     id: Tab | "counselling" | "my-package";
@@ -1720,14 +1821,16 @@ const openCounsellingModal = async () => {
                         </div>
                       </div>
                       <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                        {[
-                          ["Application No.", exam.applicationNumber],
-                          ["Roll Number", exam.rollNumber],
-                          ["Obtained Marks", exam.obtainedMarks],
-                          ["Percentile", exam.percentile],
-                          ["All India Rank", exam.allIndiaRank || exam.AIR],
-                          ["Result Status", exam.resultStatus],
-                        ].map(([k, v]) => (
+                      {(
+  [
+    ["Application No.", exam.applicationNumber],
+    ["Roll Number", exam.rollNumber],
+    ["Obtained Marks", exam.obtainedMarks],
+    ["Percentile", exam.percentile],
+    ["All India Rank", exam.allIndiaRank || exam.AIR],
+    ["Result Status", exam.resultStatus],
+  ] as [string, string | undefined][]
+).map(([k, v]) => (
                           <div key={k}>
                             <p className="text-xs text-slate-400">{k}</p>
                             <p className="mt-1 font-semibold">{v || "—"}</p>
@@ -2292,7 +2395,6 @@ const openCounsellingModal = async () => {
         </div>
       )}
 
-      {/* Counselling request modal */}
      
 {/* ================= COUNSELLING REQUEST MODAL ================= */}
 
