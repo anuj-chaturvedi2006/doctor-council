@@ -81,7 +81,7 @@ const mailer = nodemailer.createTransport({
 });
 
 // ================= MONGODB =================
-const api=process.env.NEXT_PUBLIC_API_URL
+const api=process.env.MONGODB_URI
 mongoose
   .connect(`${api}`)
   .then(() => console.log("database connected"))
