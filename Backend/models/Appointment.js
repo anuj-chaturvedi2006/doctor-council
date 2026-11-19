@@ -13,18 +13,28 @@ const appointmentSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "CounsellingRequest",
       required: true,
+      index: true,
+    },
+
+    // Assignment active counsellor ko identify karega
+    assignment: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "CounsellingAssignment",
+      default: null,
     },
 
     student: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User1",
       required: true,
+      index: true,
     },
 
     counsellor: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User1",
       required: true,
+      index: true,
     },
 
     appointmentDate: {
@@ -68,10 +78,18 @@ const appointmentSchema = new mongoose.Schema(
       default: "",
     },
 
+    // Student booking par pending; counsellor/admin booking par scheduled
     status: {
       type: String,
-      enum: ["scheduled", "completed", "cancelled", "rescheduled"],
-      default: "scheduled",
+      enum: [
+        "pending",
+        "scheduled",
+        "rescheduled",
+        "in_progress",
+        "completed",
+        "cancelled",
+      ],
+      default: "pending",
     },
 
     createdBy: {
@@ -79,40 +97,73 @@ const appointmentSchema = new mongoose.Schema(
       ref: "User1",
       required: true,
     },
-    rescheduleHistory: [
-  {
-    oldAppointmentDate: {
-      type: Date,
+
+    createdByRole: {
+      type: String,
+      enum: ["student", "counsellor", "admin", "superadmin"],
       required: true,
     },
-    oldAppointmentTime: {
-      type: String,
-      required: true,
-    },
-    oldMeetingMode: {
-      type: String,
-      enum: ["online", "offline"],
-    },
-    oldMeetingLink: {
-      type: String,
-      default: "",
-    },
-    oldLocation: {
-      type: String,
-      default: "",
-    },
-    rescheduledAt: {
-      type: Date,
-      default: Date.now,
-    },
-    rescheduledBy: {
+
+    approvedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User1",
+      default: null,
     },
-  },
-],
+
+    approvedAt: {
+      type: Date,
+      default: null,
+    },
+
+    cancelledBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User1",
+      default: null,
+    },
+
+    cancellationReason: {
+      type: String,
+      default: "",
+    },
+
+    rescheduleHistory: [
+      {
+        oldAppointmentDate: {
+          type: Date,
+          required: true,
+        },
+        oldAppointmentTime: {
+          type: String,
+          required: true,
+        },
+        oldMeetingMode: {
+          type: String,
+          enum: ["online", "offline"],
+        },
+        oldMeetingLink: {
+          type: String,
+          default: "",
+        },
+        oldLocation: {
+          type: String,
+          default: "",
+        },
+        rescheduledAt: {
+          type: Date,
+          default: Date.now,
+        },
+        rescheduledBy: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User1",
+        },
+      },
+    ],
   },
   { timestamps: true }
 );
+
+appointmentSchema.index({ student: 1, appointmentDate: 1 });
+appointmentSchema.index({ counsellor: 1, appointmentDate: 1 });
+appointmentSchema.index({ counsellingRequest: 1, status: 1 });
 
 module.exports = mongoose.model("Appointment", appointmentSchema);

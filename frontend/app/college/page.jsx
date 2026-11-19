@@ -193,6 +193,9 @@ const cellText = (value) => {
 
 /* ---------- College Card ---------- */
 
+
+/* ---------- College Card ---------- */
+
 const CollegeCard = ({ college, isSelected, onToggle }) => {
   const [imgError, setImgError] = useState(false);
 
@@ -208,51 +211,40 @@ const CollegeCard = ({ college, isSelected, onToggle }) => {
 
   return (
     <article
-      className={`group flex flex-col overflow-hidden rounded-xl border bg-white shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-xl ${
+      className={`group flex flex-col overflow-hidden rounded-2xl border bg-white transition-all duration-300 hover:-translate-y-1 hover:shadow-xl ${
         isSelected
           ? "border-blue-600 ring-2 ring-blue-600"
-          : "border-slate-300"
+          : "border-slate-200 shadow-sm hover:border-blue-200"
       }`}
     >
-      {/* Image area */}
-      <div className="relative h-52 overflow-hidden border-b border-slate-300 bg-slate-100">
+      {/* College Image */}
+      <div className="relative h-48 overflow-hidden border-b border-slate-100 bg-slate-50">
         {hasImage ? (
-          <>
-            {/* Blurred background */}
-            <img
-              src={image}
-              alt=""
-              aria-hidden="true"
-              className="absolute inset-0 h-full w-full scale-125 object-cover blur-xl"
-            />
-            <div className="absolute inset-0 bg-black/10" />
-            {/* Main image */}
-            <img
-              src={image}
-              alt={name}
-              onError={() => setImgError(true)}
-              className="relative z-10 mx-auto h-full object-contain transition duration-500 group-hover:scale-105"
-            />
-          </>
+          <img
+            src={image}
+            alt={name}
+            onError={() => setImgError(true)}
+            className="h-full w-full object-contain p-4 transition-transform duration-500 group-hover:scale-105"
+          />
         ) : (
-          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-[#1e2f6b] via-blue-700 to-indigo-600">
-            <span className="text-7xl font-bold uppercase text-white/90">
+          <div className="flex h-full items-center justify-center bg-gradient-to-br from-blue-950 via-blue-800 to-blue-600">
+            <div className="flex h-20 w-20 items-center justify-center rounded-2xl border border-white/20 bg-white/10 text-5xl font-bold uppercase text-white">
               {name.charAt(0)}
-            </span>
+            </div>
           </div>
         )}
 
-        {/* Compare button */}
+        {/* Compare Button */}
         <button
           onClick={onToggle}
-          className={`absolute right-3 top-3 z-20 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold shadow-md transition ${
+          className={`absolute right-4 top-4 flex items-center gap-2 rounded-full px-3.5 py-2 text-xs font-semibold shadow-md transition ${
             isSelected
-              ? "bg-blue-600 text-white"
-              : "bg-white/95 text-slate-700 hover:bg-white"
+              ? "bg-blue-900 text-white"
+              : "bg-white text-slate-700 hover:bg-blue-50"
           }`}
         >
           {isSelected ? (
-            <FiCheck size={14} strokeWidth={3} />
+            <FiCheck size={14} />
           ) : (
             <FiColumns size={14} />
           )}
@@ -260,55 +252,75 @@ const CollegeCard = ({ college, isSelected, onToggle }) => {
         </button>
       </div>
 
-      {/* Body */}
+      {/* Card Body */}
       <div className="flex flex-1 flex-col p-6">
-        <h3
-          title={name}
-          className="line-clamp-2 break-words text-xl font-bold leading-snug text-[#1e2f6b]"
-        >
-          {name}
-        </h3>
 
-        {description && (
-          <p className="mt-3 line-clamp-3 text-[15px] leading-relaxed text-slate-600">
-            {description}
-          </p>
-        )}
+        {/* College Name */}
+        <div className="mb-3">
+          {tags[0] && (
+            <span className="mb-2 inline-block rounded-md bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+              {tags[0]}
+            </span>
+          )}
 
-        {/* Contact info */}
-        <div className="mt-4 space-y-2.5 text-sm text-slate-600">
-          <div className="flex items-start gap-2.5">
-            <FiMapPin className="mt-0.5 shrink-0 text-[#a8470f]" size={16} />
-            {address ? (
-              <span
+          <h3
+            title={name}
+            className="line-clamp-2 min-h-[56px] text-xl font-bold leading-7 text-slate-900 transition-colors group-hover:text-blue-800"
+          >
+            {name}
+          </h3>
+        </div>
+
+        {/* Description */}
+        <p className="mb-5 line-clamp-2 min-h-[44px] text-sm leading-6 text-slate-500">
+          {description || "Explore college information, admission details and available facilities."}
+        </p>
+
+        {/* College Information */}
+        <div className="space-y-3">
+
+          {/* Location */}
+          <div className="flex items-start gap-3 rounded-xl bg-slate-50 p-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-100 text-blue-800">
+              <FiMapPin size={17} />
+            </div>
+
+            <div className="min-w-0">
+              <p className="text-xs text-slate-400">College Location</p>
+              <p
                 title={address}
-                className="line-clamp-2 break-words leading-snug"
+                className="mt-1 line-clamp-2 break-words text-sm font-semibold text-slate-800"
               >
-                {address}
-              </span>
-            ) : (
-              <span className="text-slate-300">Address not available</span>
-            )}
+                {address || "Address not available"}
+              </p>
+            </div>
           </div>
 
+          {/* Email */}
           {email && (
-            <div className="flex items-start gap-2.5">
-              <FiMail className="mt-0.5 shrink-0 text-[#a8470f]" size={16} />
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-800">
+                <FiMail size={16} />
+              </div>
               <a
                 href={`mailto:${email}`}
-                className="break-all hover:text-[#1e2f6b] hover:underline"
+                title={email}
+                className="truncate text-sm text-slate-600 transition hover:text-blue-800"
               >
                 {email}
               </a>
             </div>
           )}
 
+          {/* Phone */}
           {phone && (
-            <div className="flex items-start gap-2.5">
-              <FiPhone className="mt-0.5 shrink-0 text-[#a8470f]" size={16} />
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-800">
+                <FiPhone size={16} />
+              </div>
               <a
                 href={`tel:${phone}`}
-                className="hover:text-[#1e2f6b] hover:underline"
+                className="text-sm font-medium text-slate-600 transition hover:text-blue-800"
               >
                 {phone}
               </a>
@@ -316,33 +328,47 @@ const CollegeCard = ({ college, isSelected, onToggle }) => {
           )}
         </div>
 
-        {/* View details */}
-        <Link
-          href={`/college/${college._id}`}
-          className="mt-5 inline-flex items-center gap-1.5 self-start text-base font-medium text-[#a8470f] transition-all hover:gap-2.5 hover:underline"
-        >
-          View details
-          <FiArrowRight size={16} />
-        </Link>
+        {/* Tags */}
+        {tags.length > 1 && (
+          <div className="mt-5 flex flex-wrap gap-2">
+            {tags.slice(1, 4).map((tag, index) => (
+              <span
+                key={index}
+                className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600"
+              >
+                {tag}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* View Details */}
+        <div className="mt-auto pt-6">
+          <Link
+            href={`/college/${college._id}`}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-800"
+          >
+            View College Details
+            <FiArrowRight size={17} />
+          </Link>
+        </div>
       </div>
 
       {/* Footer */}
-      <div className="mt-auto flex items-center justify-between gap-4 border-t border-slate-300 px-6 py-3.5 text-sm">
-        <span className="flex shrink-0 items-center gap-1.5 text-slate-600">
+      <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50 px-6 py-3.5">
+        <span className="flex items-center gap-2 text-xs font-medium text-slate-500">
           <FiCalendar size={14} />
-          {date || "—"}
+          {date || "Date not available"}
         </span>
 
-        <span
-          title={tags.join(", ")}
-          className="truncate text-right text-[#1e2f6b]"
-        >
-          {tags.length ? tags.slice(0, 3).join(", ") : ""}
+        <span className="text-xs font-semibold text-blue-900">
+          College
         </span>
       </div>
     </article>
   );
 };
+
 
 /* ---------- Compare table cell ---------- */
 

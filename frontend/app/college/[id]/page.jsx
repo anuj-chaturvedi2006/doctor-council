@@ -14,11 +14,21 @@ import {
   FiCheck,
   FiInfo,
   FiAlertCircle,
+  FiBookOpen,
 } from "react-icons/fi";
 
 const API = "http://localhost:2002";
 
 /* ---------- Helpers ---------- */
+const getImageUrl = (imagePath) => {
+  if (!imagePath) return "";
+
+  if (imagePath.startsWith("http")) {
+    return imagePath;
+  }
+
+  return `${API}${imagePath}`;
+};
 
 const isEmpty = (v) => v === null || v === undefined || v === "";
 
@@ -97,8 +107,10 @@ const formatAddress = (college) => {
 
 // In keys ko "Other Information" mein dobara nahi dikhana
 const HIDDEN_KEYS = ["_id", "__v", "password"];
+
 const NAME_KEYS = ["name", "collegeName", "instituteName", "title"];
 const CONTACT_KEYS = ["email", "contactEmail", "phone", "contactNumber"];
+
 const ADDRESS_KEYS = [
   "address",
   "location",
@@ -313,8 +325,8 @@ console.log("college detail>>>>>>>>>>>>>>>>",college);
 
   /* Data prepare */
   const name = getCollegeName(college);
-  const email = getText(college.contact.email || college.contactEmail);
-  const phone = getText(college.contact.phone || college.contactNumber);
+const email = getText(college.contact?.email || college.contactEmail);
+const phone = getText(college.contact?.phone || college.contactNumber);
   const address = formatAddress(college);
 
   const skipKeys = [
@@ -341,28 +353,80 @@ console.log("college detail>>>>>>>>>>>>>>>>",college);
         </Link>
 
         {/* Hero */}
-        <div className="overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 p-6 text-white shadow-md sm:p-8">
-          <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
-            <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl bg-white/20 text-4xl font-bold uppercase backdrop-blur">
-              {name.charAt(0)}
-            </div>
+       
+{/* Hero */}
 
-            <div className="min-w-0 flex-1">
-              <h1 className="break-words text-2xl font-bold leading-tight sm:text-3xl">
-                {name}
-              </h1>
+{/* ================= COLLEGE HERO ================= */}
 
-              <button
-                onClick={copyId}
-                title="Copy ID"
-                className="mt-3 inline-flex max-w-full items-center gap-2 rounded-lg bg-white/15 px-3 py-1.5 text-xs text-blue-50 transition hover:bg-white/25"
-              >
-                <span className="truncate">ID: {college._id}</span>
-                {copied ? <FiCheck size={14} /> : <FiCopy size={14} />}
-              </button>
-            </div>
-          </div>
+<div className="relative isolate mb-8 min-h-[300px] overflow-hidden rounded-3xl bg-[#14234f] shadow-xl sm:min-h-[340px]">
+
+  {/* Dynamic Background Image */}
+  <div
+    className="absolute inset-0 -z-20 bg-cover bg-center"
+    style={{
+      backgroundImage: college.collegeImage
+        ? `url("${getImageUrl(college.collegeImage)}")`
+        : "linear-gradient(135deg, #14234f, #394b82)",
+    }}
+  />
+
+  {/* Dark Overlay */}
+  <div className="absolute inset-0 -z-10 bg-gradient-to-r from-[#101d43]/90 via-[#14234f]/75 to-[#14234f]/40" />
+
+  {/* Hero Content */}
+  <div className="relative flex flex-col gap-7 p-6 sm:p-10 md:flex-row md:items-center">
+
+    {/* Dynamic College Logo */}
+    <div className="flex h-28 w-28 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/40 bg-white p-2 shadow-2xl">
+
+      {college.logo ? (
+        <img
+          src={getImageUrl(college.logo)}
+          alt={`${name} logo`}
+          className="h-full w-full rounded-xl object-contain"
+        />
+      ) : (
+        <div className="flex h-full w-full flex-col items-center justify-center rounded-xl border-2 border-[#1e2f6b] text-[#1e2f6b]">
+          <FiBookOpen size={38} />
+          <span className="mt-1 text-xs font-extrabold tracking-widest">
+            COLLEGE
+          </span>
         </div>
+      )}
+
+    </div>
+
+    {/* College Details */}
+    <div className="min-w-0 flex-1">
+
+      <span className="inline-flex items-center rounded-full border border-white/30 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-blue-100 backdrop-blur">
+        Educational Institution
+      </span>
+
+      <h1 className="mt-4 break-words text-2xl font-extrabold leading-tight text-white sm:text-3xl md:text-4xl">
+        {name}
+      </h1>
+
+      {college.collegeType && (
+        <p className="mt-2 text-sm font-medium text-blue-100">
+          {college.collegeType}
+        </p>
+      )}
+
+      {address && (
+        <p className="mt-3 flex items-start gap-2 text-sm leading-relaxed text-blue-100 sm:text-base">
+          <FiMapPin className="mt-1 shrink-0" />
+          {address}
+        </p>
+      )}
+
+    </div>
+  </div>
+</div>
+
+{/* ================= END COLLEGE HERO ================= */}
+
+
 
         {/* Contact & Address */}
         <h2 className="mb-4 mt-8 text-lg font-bold text-gray-800">

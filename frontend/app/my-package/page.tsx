@@ -1,21 +1,13 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
-import {
-  Package,
-  CalendarDays,
-  Clock,
-  CheckCircle,
-  XCircle,
-  AlertCircle,
-  RefreshCw,
-  CreditCard,
-} from "lucide-react";
+import React, { useEffect, useState } from "react";
+import axios from "axios";
+import { toast, ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 const API_URL = "http://localhost:2002";
 
-// Razorpay Checkout script load
 const loadRazorpayScript = () => {
   return new Promise((resolve) => {
     if (window.Razorpay) {
@@ -25,7 +17,6 @@ const loadRazorpayScript = () => {
 
     const script = document.createElement("script");
     script.src = "https://checkout.razorpay.com/v1/checkout.js";
-
     script.onload = () => resolve(true);
     script.onerror = () => resolve(false);
 
@@ -33,157 +24,166 @@ const loadRazorpayScript = () => {
   });
 };
 
-export default function MyPackagePage() {
+const MyPackagePage = () => {
   const [packages, setPackages] = useState([]);
+  const [token, setToken] = useState("");
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [retryingId, setRetryingId] = useState(null);
-  const [paymentMessage, setPaymentMessage] = useState("");
+  const [error, setError] = useState("");
 
   // Fetch student packages
-  const fetchMyPackages = async () => {
+  const fetchMyPackages = async (authToken) => {
     try {
       setLoading(true);
       setError("");
 
-      const token = localStorage.getItem("token");
-
-      const response = await fetch(
+      const response = await axios.get(
         `${API_URL}/student/my-package`,
         {
-          method: "GET",
           headers: {
-            Authorization: `Bearer ${token}`,
+            Authorization: `Bearer ${authToken}`,
           },
         }
       );
 
-      const result = await response.json();
+      if (response.data.success) {
+        const result = response.data.data;
 
-      if (!response.ok || !result.success) {
-        throw new Error(result.message || "Unable to fetch packages");
+        setPackages(Array.isArray(result) ? result : result ? [result] : []);
+      } else {
+        setPackages([]);
+        setError(response.data.message || "Packages not found");
       }
-
-      setPackages(result.data || []);
     } catch (err) {
-      console.error(err);
-      setError(err.message || "Something went wrong");
+      console.error("MY PACKAGE ERROR:", err.response?.data || err);
+
+      setError(
+        err.response?.data?.message || "Unable to fetch your packages"
+      );
     } finally {
       setLoading(false);
     }
   };
 
+  // Get token after component mounts
   useEffect(() => {
-    fetchMyPackages();
+    const savedToken = localStorage.getItem("token");
+
+    if (!savedToken) {
+      setError("Please login first to view your packages.");
+      setLoading(false);
+      return;
+    }
+
+    setToken(savedToken);
+    fetchMyPackages(savedToken);
   }, []);
 
-  // Retry Payment
+  // Date formatter
+  const formatDate = (date) => {
+    if (!date) return "Not available";
+
+    const parsedDate = new Date(date);
+
+    if (isNaN(parsedDate.getTime())) return "Not available";
+
+    return parsedDate.toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  };
+
+  // Remaining days
+  const getRemainingDays = (expiryDate) => {
+    if (!expiryDate) return null;
+
+    const today = new Date();
+    const expiry = new Date(expiryDate);
+
+    if (isNaN(expiry.getTime())) return null;
+
+    const difference = expiry.getTime() - today.getTime();
+
+    return Math.max(0, Math.ceil(difference / (1000 * 60 * 60 * 24)));
+  };
+
+  // Retry payment
   const handleRetryPayment = async (item) => {
     try {
       setRetryingId(item._id);
-      setPaymentMessage("");
 
-      const token = localStorage.getItem("token");
-
-      if (!token) {
-        throw new Error("Please login again");
-      }
-
-      // 1. Create new Razorpay order
-      const response = await fetch(
-        `${API_URL}/student/retry-package-order`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            studentPackageId: item._id,
-          }),
-        }
-      );
-
-      const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        throw new Error(
-          result.message || "Unable to create payment order"
-        );
-      }
-
-      // 2. Load Razorpay Checkout
       const scriptLoaded = await loadRazorpayScript();
 
       if (!scriptLoaded) {
-        throw new Error("Razorpay SDK failed to load");
+        toast.error("Razorpay SDK failed to load");
+        return;
       }
 
-      // 3. Razorpay Checkout options
+      const orderResponse = await axios.post(
+        `${API_URL}/student/retry-package-order`,
+        {
+          studentPackageId: item._id,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!orderResponse.data.success) {
+        toast.error(orderResponse.data.message || "Unable to create order");
+        return;
+      }
+
+      const order = orderResponse.data.data;
+
       const options = {
-        key: result.key,
-        amount: result.amount,
-        currency: result.currency,
+        key: order.key,
+        amount: order.amount,
+        currency: order.currency,
         name: "Doctor Council",
-        description: result.packageName,
-        order_id: result.orderId,
+        description: order.packageName,
+        order_id: order.orderId,
 
-        handler: async function (paymentResponse) {
+        handler: async function (razorpayResponse) {
           try {
-            setPaymentMessage("Verifying payment...");
-
-            // 4. Verify payment on backend
-            const verifyResponse = await fetch(
+            const verifyResponse = await axios.post(
               `${API_URL}/verify-payment`,
               {
-                method: "POST",
+                razorpay_order_id: razorpayResponse.razorpay_order_id,
+                razorpay_payment_id: razorpayResponse.razorpay_payment_id,
+                razorpay_signature: razorpayResponse.razorpay_signature,
+              },
+              {
                 headers: {
-                  "Content-Type": "application/json",
                   Authorization: `Bearer ${token}`,
                 },
-                body: JSON.stringify({
-                  razorpay_order_id:
-                    paymentResponse.razorpay_order_id,
-
-                  razorpay_payment_id:
-                    paymentResponse.razorpay_payment_id,
-
-                  razorpay_signature:
-                    paymentResponse.razorpay_signature,
-                }),
               }
             );
 
-            const verifyResult = await verifyResponse.json();
+            if (verifyResponse.data.success) {
+              toast.success("Payment successful! Package activated.");
 
-            if (!verifyResponse.ok || !verifyResult.success) {
-              throw new Error(
-                verifyResult.message || "Payment verification failed"
+              await fetchMyPackages(token);
+            } else {
+              toast.error(
+                verifyResponse.data.message || "Payment verification failed"
               );
             }
-
-            setPaymentMessage(
-              "Payment successful! Your package is now active."
-            );
-
-            // 5. Refresh package list
-            await fetchMyPackages();
-
           } catch (err) {
-            console.error("Verification error:", err);
+            console.error("VERIFY ERROR:", err.response?.data || err);
 
-            setPaymentMessage(
-              err.message || "Payment verification failed"
+            toast.error(
+              err.response?.data?.message || "Payment verification failed"
             );
-          } finally {
-            setRetryingId(null);
           }
         },
 
         modal: {
           ondismiss: function () {
-            setRetryingId(null);
-            setPaymentMessage("Payment window closed. You can retry anytime.");
+            toast.info("Payment window closed");
           },
         },
 
@@ -192,377 +192,282 @@ export default function MyPackagePage() {
         },
       };
 
-      // 6. Open Razorpay Checkout
-      const razorpayInstance = new window.Razorpay(options);
+      const razorpay = new window.Razorpay(options);
 
-      razorpayInstance.on("payment.failed", function (response) {
-        setPaymentMessage(
+      razorpay.on("payment.failed", function (response) {
+        toast.error(
           response.error?.description || "Payment failed. Please try again."
         );
-
-        setRetryingId(null);
       });
 
-      razorpayInstance.open();
-
+      razorpay.open();
     } catch (err) {
-      console.error("Retry payment error:", err);
+      console.error("RETRY PAYMENT ERROR:", err.response?.data || err);
 
-      setPaymentMessage(
-        err.message || "Something went wrong"
+      toast.error(
+        err.response?.data?.message || "Unable to retry payment"
       );
-
+    } finally {
       setRetryingId(null);
     }
   };
 
-  // Remaining days
-  const getRemainingDays = (expiryDate) => {
-    if (!expiryDate) return 0;
+  // Status styles
+  const getStatusStyle = (status) => {
+    switch (status?.toLowerCase()) {
+      case "paid":
+      case "active":
+        return "bg-green-100 text-green-700";
 
-    const difference =
-      new Date(expiryDate).getTime() - new Date().getTime();
+      case "pending":
+      case "created":
+        return "bg-yellow-100 text-yellow-700";
 
-    return Math.max(
-      0,
-      Math.ceil(difference / (1000 * 60 * 60 * 24))
+      case "failed":
+      case "expired":
+      case "inactive":
+        return "bg-red-100 text-red-700";
+
+      default:
+        return "bg-gray-100 text-gray-700";
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading your packages...</p>
+        </div>
+      </div>
     );
-  };
-
-  // Format date
-  const formatDate = (date) => {
-    if (!date) return "Not available";
-
-    return new Date(date).toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  };
-
-  const activePackages = packages.filter(
-    (item) => item.packageStatus === "active"
-  );
-
-  const pendingPackages = packages.filter(
-    (item) => item.paymentStatus === "pending"
-  );
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50 px-4 py-10">
-      <div className="mx-auto max-w-7xl">
+    <div className="min-h-screen bg-gray-50 px-4 py-8 sm:px-6 lg:px-10">
+      <ToastContainer position="top-right" autoClose={3000} />
+
+      <div className="max-w-6xl mx-auto">
 
         {/* Header */}
-        <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">
-              My Packages
-            </h1>
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900">
+            My Packages
+          </h1>
 
-            <p className="mt-2 text-gray-500">
-              Manage your counselling packages and payment history.
-            </p>
-          </div>
-
-          <button
-            onClick={fetchMyPackages}
-            disabled={loading || retryingId !== null}
-            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-white hover:bg-blue-700 disabled:opacity-50"
-          >
-            <RefreshCw size={17} />
-            Refresh
-          </button>
+          <p className="text-gray-500 mt-2">
+            View your purchased counselling packages and payment details.
+          </p>
         </div>
-
-        {/* Payment Message */}
-        {paymentMessage && (
-          <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-700">
-            {paymentMessage}
-          </div>
-        )}
-
-        {/* Summary Cards */}
-        <div className="mb-8 grid grid-cols-1 gap-5 sm:grid-cols-2">
-
-          <div className="rounded-xl border bg-white p-6 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-green-100 p-3 text-green-600">
-                <CheckCircle size={25} />
-              </div>
-
-              <div>
-                <p className="text-sm text-gray-500">
-                  Active Packages
-                </p>
-
-                <h2 className="text-2xl font-bold">
-                  {activePackages.length}
-                </h2>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-xl border bg-white p-6 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-yellow-100 p-3 text-yellow-600">
-                <Clock size={25} />
-              </div>
-
-              <div>
-                <p className="text-sm text-gray-500">
-                  Pending Payments
-                </p>
-
-                <h2 className="text-2xl font-bold">
-                  {pendingPackages.length}
-                </h2>
-              </div>
-            </div>
-          </div>
-
-        </div>
-
-        {/* Loading */}
-        {loading && (
-          <div className="py-16 text-center text-gray-500">
-            Loading your packages...
-          </div>
-        )}
 
         {/* Error */}
-        {!loading && error && (
-          <div className="rounded-xl bg-red-50 p-5 text-center text-red-600">
+        {error && (
+          <div className="mb-6 rounded-xl bg-red-50 border border-red-200 p-4 text-red-700">
             {error}
           </div>
         )}
 
-        {/* Empty */}
-        {!loading && !error && packages.length === 0 && (
-          <div className="rounded-xl border bg-white p-12 text-center">
-            <Package
-              className="mx-auto mb-4 text-gray-400"
-              size={45}
-            />
+        {/* Empty state */}
+        {!error && packages.length === 0 && (
+          <div className="bg-white rounded-2xl shadow-sm border p-10 text-center">
+            <div className="text-5xl mb-4">📦</div>
 
-            <h2 className="text-xl font-semibold">
-              No packages purchased yet
+            <h2 className="text-xl font-semibold text-gray-800">
+              No Packages Found
             </h2>
 
-            <p className="mt-2 text-gray-500">
-              Explore our available packages to get started.
+            <p className="text-gray-500 mt-2">
+              You have not purchased any counselling package yet.
             </p>
+
+            <a
+              href="/plan"
+              className="inline-block mt-6 px-6 py-3 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-700"
+            >
+              Explore Packages
+            </a>
           </div>
         )}
 
-        {/* Package List */}
-        {!loading && !error && packages.length > 0 && (
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        {/* Package cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {packages.map((item) => {
+            const remainingDays = getRemainingDays(
+              item.expiryDate || item.endDate
+            );
 
-            {packages.map((item) => {
-              const remainingDays = getRemainingDays(
-                item.expiryDate
+            const isPaid = item.paymentStatus === "paid";
+            const isActive = item.packageStatus === "active";
+
+            const canRetry =
+              !isPaid &&
+              ["created", "pending", "failed"].includes(
+                item.paymentStatus?.toLowerCase()
               );
 
-              const isPending =
-                item.paymentStatus === "pending" &&
-                item.packageStatus === "inactive";
-
-              return (
-                <div
-                  key={item._id}
-                  className="rounded-2xl border bg-white p-6 shadow-sm"
-                >
-
-                  {/* Title and Status */}
-                  <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-
-                    <div className="flex items-center gap-3">
-                      <div className="rounded-xl bg-blue-100 p-3 text-blue-600">
-                        <Package size={25} />
-                      </div>
-
-                      <div>
-                        <h2 className="text-xl font-bold text-gray-900">
-                          {item.packageName}
-                        </h2>
-
-                        <p className="text-sm text-gray-500">
-                          Counselling Package
-                        </p>
-                      </div>
-                    </div>
-
-                    <span
-                      className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                        item.packageStatus === "active"
-                          ? "bg-green-100 text-green-700"
-                          : item.packageStatus === "expired"
-                          ? "bg-red-100 text-red-700"
-                          : "bg-gray-100 text-gray-600"
-                      }`}
-                    >
-                      {item.packageStatus.toUpperCase()}
+            return (
+              <div
+                key={item._id}
+                className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden"
+              >
+                {/* Card header */}
+                <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-6 text-white">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-medium bg-white/20 px-3 py-1 rounded-full">
+                      Counselling Package
                     </span>
 
+                    <span className="text-sm">
+                      {isActive ? "✓ Active" : item.packageStatus}
+                    </span>
                   </div>
 
-                  {/* Price */}
-                  <div className="mb-5 border-b pb-5">
-                    <p className="text-sm text-gray-500">
-                      Package Amount
-                    </p>
+                  <h2 className="text-2xl font-bold mt-5">
+                    {item.packageName || item.package?.name || "My Package"}
+                  </h2>
 
-                    <h3 className="mt-1 text-3xl font-bold text-blue-600">
-                      ₹{(item.amountPaise / 100).toFixed(2)}
-                    </h3>
+                  <p className="text-blue-100 mt-2">
+                    Your Doctor Council package
+                  </p>
+
+                  <div className="mt-5 text-3xl font-bold">
+                    ₹
+                    {(
+                      item.amountPaise != null
+                        ? item.amountPaise / 100
+                        : item.amount || 0
+                    ).toLocaleString("en-IN")}
                   </div>
+                </div>
 
-                  {/* Details */}
-                  <div className="grid grid-cols-2 gap-4">
+                {/* Card body */}
+                <div className="p-6">
 
+                  {/* Status */}
+                  <div className="grid grid-cols-2 gap-4 mb-6">
                     <div>
-                      <p className="mb-1 flex items-center gap-2 text-sm text-gray-500">
-                        <CalendarDays size={16} />
-                        Start Date
+                      <p className="text-sm text-gray-500 mb-2">
+                        Payment Status
                       </p>
 
-                      <p className="font-semibold">
-                        {formatDate(item.startDate)}
-                      </p>
-                    </div>
-
-                    <div>
-                      <p className="mb-1 flex items-center gap-2 text-sm text-gray-500">
-                        <CalendarDays size={16} />
-                        Expiry Date
-                      </p>
-
-                      <p className="font-semibold">
-                        {formatDate(item.expiryDate)}
-                      </p>
-                    </div>
-
-                  </div>
-
-                  {/* Remaining Days */}
-                  {item.packageStatus === "active" && (
-                    <div className="mt-5 rounded-lg bg-blue-50 p-4">
-                      <p className="flex items-center gap-2 text-sm text-blue-700">
-                        <Clock size={17} />
-                        Remaining Days
-                      </p>
-
-                      <h3 className="mt-1 text-2xl font-bold text-blue-700">
-                        {remainingDays} Days
-                      </h3>
-                    </div>
-                  )}
-
-                  {/* Payment Status */}
-                  <div className="mt-5 flex items-center justify-between border-t pt-4">
-
-                    <span className="text-sm text-gray-500">
-                      Payment Status
-                    </span>
-
-                    <span
-                      className={`flex items-center gap-1 text-sm font-semibold ${
-                        item.paymentStatus === "paid"
-                          ? "text-green-600"
-                          : item.paymentStatus === "failed"
-                          ? "text-red-600"
-                          : "text-yellow-600"
-                      }`}
-                    >
-                      {item.paymentStatus === "paid" ? (
-                        <CheckCircle size={16} />
-                      ) : item.paymentStatus === "failed" ? (
-                        <XCircle size={16} />
-                      ) : (
-                        <AlertCircle size={16} />
-                      )}
-
-                      {item.paymentStatus.toUpperCase()}
-                    </span>
-
-                  </div>
-
-                  {/* Retry Payment Button */}
-                  {isPending && (
-                    <div className="mt-5">
-                      <button
-                        onClick={() => handleRetryPayment(item)}
-                        disabled={retryingId !== null}
-                        className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      <span
+                        className={`inline-block px-3 py-1 rounded-full text-xs font-semibold capitalize ${getStatusStyle(
+                          item.paymentStatus
+                        )}`}
                       >
-                        {retryingId === item._id ? (
-                          <>
-                            <RefreshCw
-                              size={18}
-                              className="animate-spin"
-                            />
-                            Processing...
-                          </>
-                        ) : (
-                          <>
-                            <CreditCard size={18} />
-                            Retry Payment
-                          </>
-                        )}
-                      </button>
+                        {item.paymentStatus || "Unknown"}
+                      </span>
+                    </div>
+
+                    <div>
+                      <p className="text-sm text-gray-500 mb-2">
+                        Package Status
+                      </p>
+
+                      <span
+                        className={`inline-block px-3 py-1 rounded-full text-xs font-semibold capitalize ${getStatusStyle(
+                          item.packageStatus
+                        )}`}
+                      >
+                        {item.packageStatus || "Unknown"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="border-t border-gray-100 pt-5 space-y-4">
+
+                    <div className="flex justify-between gap-3">
+                      <span className="text-gray-500 text-sm">
+                        Purchase Date
+                      </span>
+
+                      <span className="text-gray-800 text-sm font-medium">
+                        {formatDate(item.startDate || item.createdAt)}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between gap-3">
+                      <span className="text-gray-500 text-sm">
+                        Expiry Date
+                      </span>
+
+                      <span className="text-gray-800 text-sm font-medium">
+                        {formatDate(item.expiryDate || item.endDate)}
+                      </span>
+                    </div>
+
+                    {isActive && remainingDays !== null && (
+                      <div className="flex justify-between gap-3">
+                        <span className="text-gray-500 text-sm">
+                          Remaining Days
+                        </span>
+
+                        <span className="text-green-600 text-sm font-bold">
+                          {remainingDays} Days
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="flex justify-between gap-3">
+                      <span className="text-gray-500 text-sm">
+                        Payment ID
+                      </span>
+
+                      <span className="text-gray-800 text-xs font-medium break-all text-right">
+                        {item.razorpayPaymentId || "Not available"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Retry button */}
+                  {canRetry && (
+                    <button
+                      onClick={() => handleRetryPayment(item)}
+                      disabled={retryingId === item._id}
+                      className="w-full mt-6 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white py-3 rounded-xl font-semibold transition"
+                    >
+                      {retryingId === item._id
+                        ? "Please wait..."
+                        : "Retry Payment"}
+                    </button>
+                  )}
+
+                  {/* Active package */}
+                  {isPaid && isActive && (
+                    <div className="mt-6 rounded-xl bg-green-50 border border-green-200 p-3 text-center text-green-700 font-medium text-sm">
+                      ✓ Your package is active
                     </div>
                   )}
 
-                  {/* Package Features */}
-                  {item.package?.features?.length > 0 && (
-                    <div className="mt-5 border-t pt-4">
-
-                      <h3 className="mb-3 font-semibold text-gray-800">
-                        Package Features
-                      </h3>
-
-                      <ul className="space-y-2">
-                        {item.package.features.map((feature, index) => (
-                          <li
-                            key={index}
-                            className="flex items-center gap-2 text-sm text-gray-600"
-                          >
-                            <CheckCircle
-                              size={16}
-                              className="text-green-500"
-                            />
-
-                            {typeof feature === "string"
-                              ? feature
-                              : feature.name}
-                          </li>
-                        ))}
-                      </ul>
-
-                    </div>
-                  )}
-
-                  {/* Transaction ID */}
-                  {item.razorpayPaymentId && (
-                    <div className="mt-5 break-all rounded-lg bg-gray-50 p-3">
-                      <p className="text-xs text-gray-500">
-                        Transaction ID
-                      </p>
-
-                      <p className="mt-1 text-sm font-medium text-gray-700">
-                        {item.razorpayPaymentId}
-                      </p>
+                  {/* Expired package */}
+                  {isPaid && item.packageStatus === "expired" && (
+                    <div className="mt-6 rounded-xl bg-red-50 border border-red-200 p-3 text-center text-red-700 font-medium text-sm">
+                      Your package has expired.
                     </div>
                   )}
 
                 </div>
-              );
-            })}
+              </div>
+            );
+          })}
+        </div>
 
+        {/* Refresh */}
+        {packages.length > 0 && (
+          <div className="text-center mt-8">
+            <button
+              onClick={() => fetchMyPackages(token)}
+              className="px-6 py-3 bg-white border border-gray-300 rounded-xl text-gray-700 font-medium hover:bg-gray-100"
+            >
+              ↻ Refresh Packages
+            </button>
           </div>
         )}
 
       </div>
     </div>
   );
-}
+};
+
+export default MyPackagePage;

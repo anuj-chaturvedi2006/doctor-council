@@ -19,6 +19,7 @@ import Specialization from "./Specialization";
 import EmailTemplate from "./EmailTemplate";
 import University from "./university";
 import Contact from "./Contact";
+import Plan from "./Plan"
 
 // Counselling Pages
 import CounsellorDashboard from "./pages/counsellor/CounsellorDashboard";
@@ -28,6 +29,7 @@ import CounsellingRequests from "./pages/counsellor/CounsellingRequests";
 import Appointments from "./pages/counsellor/Appointments"
 import CounsellingSession from "./pages/counsellor/CounsellingSessions"
 import FollowUp from "./pages/counsellor/FollowUp"
+import CounsellorManagement from "./pages/counsellor/CounsellorManagement"
 const App = () => {
   return (
     <Routes>
@@ -52,6 +54,8 @@ const App = () => {
         <Route path="/admin/specializations" element={<Specialization />} />
         <Route path="/admin/emailtemplate" element={<EmailTemplate />} />
         <Route path="/admin/contact" element={<Contact />} />
+        <Route path="/admin/plan" element={<Plan />} />
+        
         {/* Counselling Pages */}
 
         <Route
@@ -79,6 +83,7 @@ const App = () => {
         <Route path="/admin/counselling/counsellingsessions" element={<CounsellingSession />} />
       
          <Route path="/admin/counselling/follow-ups" element={<FollowUp />} />
+         <Route path="/admin/counselling/management" element={<CounsellorManagement />} />
       </Route>
     </Routes>
   );

@@ -71,13 +71,21 @@ const isCounsellor = roleName === "counsellor";
     { name: "Degree", path: "/admin/degrees", icon: <FiBook /> },
     { name: "Specialization", path: "/admin/specializations", icon: <FiLayers /> },
     { name: "Role Management", path: "/admin/role", icon: <FiUser /> },
+    {name:"Plans", path: "/admin/plan", icon: <FiUser />},
     { name: "Email Template", path: "/admin/emailtemplate", icon: <FiMail /> },
     { name: "Contact", path: "/admin/contact", icon: <FiMessageSquare /> },
   ];
 
-  const visibleMenuItems = isCounsellor
-  ? []
-  : menuItems;
+const visibleMenuItems = menuItems.map((item) => {
+  if (isCounsellor && item.name === "Dashboard") {
+    return {
+      ...item,
+      path: "/admin/counselling/dashboard",
+    };
+  }
+
+  return item;
+});
 
   // Counselling Submenu
   const counsellingSubmenu = [
@@ -154,7 +162,7 @@ const isCounsellor = roleName === "counsellor";
           <nav className="space-y-1">
             {/* Normal Menu Items */}
            {(isCounsellor ? [] : menuItems).map((item) => (
-  <NavLink
+            <NavLink
     key={item.path}
     to={item.path}
     onClick={() => setSidebarOpen(false)}

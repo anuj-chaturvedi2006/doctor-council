@@ -169,31 +169,36 @@ const [deleting, setDeleting] = useState(false);
 
   // Logged-in user permissions
 
+
+  // Logged-in user permissions
   const loggedInUser = useMemo(() => {
-
     try {
-
       return JSON.parse(localStorage.getItem("user") || "null");
-
     } catch {
-
       return null;
-
     }
-
   }, []);
 
   const permissions =
+    loggedInUser?.role?.permissions ||
+    loggedInUser?.permissions ||
+    {};
 
-    loggedInUser?.role?.permissions || loggedInUser?.permissions || {};
+  // SuperAdmin detection
+  const loggedInRoleName = getRoleNameFromUser(
+    loggedInUser,
+    roles
+  );
 
-  const canAdd = permissions?.students?.create === true;
+  const isSuperAdmin =
+    loggedInRoleName.replace(/\s+/g, "").toLowerCase() ===
+    "superadmin";
 
-  const canView = permissions?.students?.view === true;
-
-  const canUpdate = permissions?.students?.update === true;
-
-  const canDelete = permissions?.students?.delete === true;
+  // Permission checks
+  const canAdd = isSuperAdmin || permissions?.students?.create === true;
+  const canView = isSuperAdmin || permissions?.students?.view === true;
+  const canUpdate = isSuperAdmin || permissions?.students?.update === true;
+  const canDelete = isSuperAdmin || permissions?.students?.delete === true;
 
   // Load roles
 
@@ -1009,23 +1014,6 @@ const handleAddStudent = async (e) => {
           {canAdd && (
 
             <>
-
-              <button
-
-                type="button"
-
-                onClick={handleDownloadTemplate}
-
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100"
-
-              >
-
-                <FiDownload size={17} />
-
-                Download Template
-
-              </button>
-
               <button
 
                 type="button"

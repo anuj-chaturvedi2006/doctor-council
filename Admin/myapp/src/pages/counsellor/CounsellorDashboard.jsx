@@ -1,9 +1,12 @@
 
 import React, { useEffect, useState, useCallback } from "react";
-
+import { useNavigate } from "react-router-dom";
 const API = "http://localhost:2002";
 
 const CounsellorDashboard = () => {
+   
+  const navigate = useNavigate();
+
   const [assignments, setAssignments] = useState([]);
   const [followUps, setFollowUps] = useState([]);
   const [appointments, setAppointments] = useState([]);
@@ -257,6 +260,83 @@ const CounsellorDashboard = () => {
           </div>
         ))}
       </div>
+
+
+{/* Quick Actions */}
+<div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+  <h2 className="text-lg font-bold text-gray-800">
+    Quick Actions
+  </h2>
+
+  <p className="mb-5 mt-1 text-sm text-gray-500">
+    Quickly access your counselling activities.
+  </p>
+
+  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+
+    <button
+      onClick={() => navigate("/admin/counselling/my-students")}
+      className="flex items-center gap-3 rounded-xl border border-blue-100 bg-blue-50 p-4 text-left transition hover:border-blue-300 hover:bg-blue-100"
+    >
+      <span className="text-3xl">👨‍🎓</span>
+      <div>
+        <h3 className="font-semibold text-gray-800">
+          My Students
+        </h3>
+        <p className="text-xs text-gray-500">
+          View assigned students
+        </p>
+      </div>
+    </button>
+
+    <button
+      onClick={() => navigate("/admin/counselling/requests")}
+      className="flex items-center gap-3 rounded-xl border border-purple-100 bg-purple-50 p-4 text-left transition hover:border-purple-300 hover:bg-purple-100"
+    >
+      <span className="text-3xl">📋</span>
+      <div>
+        <h3 className="font-semibold text-gray-800">
+          Counselling Requests
+        </h3>
+        <p className="text-xs text-gray-500">
+          Manage student requests
+        </p>
+      </div>
+    </button>
+
+    <button
+      onClick={() => navigate("/admin/counselling/appointments")}
+      className="flex items-center gap-3 rounded-xl border border-green-100 bg-green-50 p-4 text-left transition hover:border-green-300 hover:bg-green-100"
+    >
+      <span className="text-3xl">📅</span>
+      <div>
+        <h3 className="font-semibold text-gray-800">
+          Appointments
+        </h3>
+        <p className="text-xs text-gray-500">
+          Manage appointments
+        </p>
+      </div>
+    </button>
+
+    <button
+      onClick={() => navigate("/admin/counselling/follow-ups")}
+      className="flex items-center gap-3 rounded-xl border border-orange-100 bg-orange-50 p-4 text-left transition hover:border-orange-300 hover:bg-orange-100"
+    >
+      <span className="text-3xl">⏰</span>
+      <div>
+        <h3 className="font-semibold text-gray-800">
+          Follow-ups
+        </h3>
+        <p className="text-xs text-gray-500">
+          Manage pending follow-ups
+        </p>
+      </div>
+    </button>
+
+  </div>
+</div>
+
 
       {/* Today's Appointments */}
       <div className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">

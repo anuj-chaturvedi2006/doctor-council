@@ -210,161 +210,130 @@ const fetchCourses = async () => {
         )}
 
         {/* Course Cards */}
-        {!loading && !error && filteredCourses.length > 0 && (
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
-            {filteredCourses.map((course) => (
-              <div
-                key={course._id}
-                className="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-xl"
-              >
-                {/* Card Top */}
-                <div className="relative overflow-hidden bg-gradient-to-br from-teal-600 via-cyan-600 to-blue-700 p-6 text-white">
-                  <div className="absolute -right-8 -top-8 h-36 w-36 rounded-full bg-white/10" />
-                  <div className="absolute -bottom-12 right-20 h-32 w-32 rounded-full bg-white/10" />
+          
+  
+{/* Course Cards */}
+<div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+  {filteredCourses.map((course) => (
+    <div
+      key={course._id}
+      className="group bg-white border border-slate-200 rounded-2xl overflow-hidden hover:shadow-xl hover:border-blue-200 transition-all duration-300"
+    >
+      {/* Card Header */}
+      <div className="p-6 pb-4">
+        <div className="flex items-center justify-between mb-5">
+          <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center">
+            <FiBookOpen size={24} />
+          </div>
 
-                  <div className="relative z-10 flex items-start justify-between gap-3">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/20">
-                      <FiBookOpen size={25} />
-                    </div>
+          <span
+            className={`text-xs font-semibold px-3 py-1 rounded-full ${
+              course.status?.toLowerCase() === "active"
+                ? "bg-green-50 text-green-700"
+                : "bg-slate-100 text-slate-600"
+            }`}
+          >
+            {course.status || "Available"}
+          </span>
+        </div>
 
-                    <span
-                      className={`rounded-full px-3 py-1 text-xs font-bold ${
-                        course.status?.toLowerCase() === "active"
-                          ? "bg-emerald-100 text-emerald-700"
-                          : "bg-white/20 text-white"
-                      }`}
-                    >
-                      {course.status || "Available"}
-                    </span>
-                  </div>
+        <p className="text-xs font-semibold text-blue-700 uppercase tracking-wider mb-2">
+          {course.code || "COURSE"}
+        </p>
 
-                  <h2 className="relative z-10 mt-6 text-2xl font-bold">
-                    {course.name}
-                  </h2>
+        <h3 className="text-xl font-bold text-slate-900 mb-3 group-hover:text-blue-700 transition-colors">
+          {course.name}
+        </h3>
 
-                  <p className="relative z-10 mt-2 text-sm text-white/80">
-                    {course.code
-                      ? `Course Code: ${course.code}`
-                      : "Professional Course"}
-                  </p>
-                </div>
+        <p className="text-sm text-slate-500 leading-6 line-clamp-2 min-h-[48px]">
+          {course.description || "Explore course details and admission information."}
+        </p>
+      </div>
 
-                {/* Card Body */}
-                <div className="p-6">
-                  <p className="min-h-[48px] text-sm leading-6 text-slate-500">
-                    {course.description ||
-                      "Explore this course and learn more about its eligibility and program details."}
-                  </p>
+      {/* Course Information */}
+      <div className="px-6 pb-5">
+        <div className="grid grid-cols-2 gap-3">
+          <div className="bg-slate-50 rounded-xl p-3">
+            <div className="flex items-center gap-2 text-slate-400 mb-2">
+              <FiLayers size={15} />
+              <span className="text-xs">Stream</span>
+            </div>
+            <p className="text-sm font-semibold text-slate-800">
+              {getRelationName(course.stream) || "N/A"}
+            </p>
+          </div>
 
-                  {/* Stream and Degree */}
-                  <div className="mt-5 space-y-3">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-teal-50 text-teal-600">
-                        <FiLayers size={18} />
-                      </div>
+          <div className="bg-slate-50 rounded-xl p-3">
+            <div className="flex items-center gap-2 text-slate-400 mb-2">
+              <FiAward size={15} />
+              <span className="text-xs">Degree</span>
+            </div>
+            <p className="text-sm font-semibold text-slate-800">
+              {getRelationName(course.degree) || "N/A"}
+            </p>
+          </div>
+        </div>
 
-                      <div>
-                        <p className="text-xs text-slate-400">Stream</p>
-                        <p className="text-sm font-semibold text-slate-700">
-                          {getRelationName(course.stream)}
-                        </p>
-                      </div>
-                    </div>
+        <div className="flex items-center justify-between mt-4 py-3 border-y border-slate-100">
+          <div className="flex items-center gap-2 text-slate-500">
+            <FiClock size={17} />
+            <span className="text-sm">Duration</span>
+          </div>
+          <span className="text-sm font-semibold text-slate-800">
+            {course.duration?.value
+              ? `${course.duration.value} ${course.duration.unit || ""}`
+              : "N/A"}
+          </span>
+        </div>
 
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
-                        <FiAward size={18} />
-                      </div>
+        {/* Eligibility */}
+        <div className="mt-4">
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+            Eligibility
+          </p>
+          <p className="text-sm text-slate-700">
+            {course.eligibility?.minimumPercentage
+              ? `Minimum ${course.eligibility.minimumPercentage}% marks`
+              : "As per admission criteria"}
+          </p>
+        </div>
 
-                      <div>
-                        <p className="text-xs text-slate-400">Degree</p>
-                        <p className="text-sm font-semibold text-slate-700">
-                          {getRelationName(course.degree)}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-orange-50 text-orange-600">
-                        <FiClock size={18} />
-                      </div>
-
-                      <div>
-                        <p className="text-xs text-slate-400">Duration</p>
-                        <p className="text-sm font-semibold text-slate-700">
-                          {course.duration?.value
-                            ? `${course.duration.value} ${course.duration.unit || ""}`
-                            : "Not specified"}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Eligibility */}
-                  <div className="mt-5 rounded-xl bg-slate-50 p-4">
-                    <h3 className="mb-2 text-sm font-bold text-slate-800">
-                      Eligibility
-                    </h3>
-
-                    <p className="text-sm text-slate-600">
-                      {course.eligibility?.requiredQualification ||
-                        "Qualification not specified"}
-                    </p>
-
-                    {course.eligibility?.minimumPercentage !== undefined && (
-                      <p className="mt-1 text-xs text-slate-500">
-                        Minimum Percentage:{" "}
-                        <span className="font-bold text-teal-700">
-                          {course.eligibility.minimumPercentage}%
-                        </span>
-                      </p>
-                    )}
-
-                    {course.eligibility?.requiredSubjects &&
-                      course.eligibility.requiredSubjects.length > 0 && (
-                        <p className="mt-2 text-xs text-slate-500">
-                          Subjects:{" "}
-                          {course.eligibility.requiredSubjects.join(", ")}
-                        </p>
-                      )}
-                  </div>
-
-                  {/* Entrance Exams */}
-                  {course.entranceExams && course.entranceExams.length > 0 && (
-                    <div className="mt-4">
-                      <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-400">
-                        Entrance Exams
-                      </p>
-
-                      <div className="flex flex-wrap gap-2">
-                        {course.entranceExams.map((exam, index) => (
-                          <span
-                            key={index}
-                            className="rounded-lg bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-700"
-                          >
-                            {exam}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Footer */}
-                  <div className="mt-6 border-t border-slate-100 pt-4">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedCourse(course)}
-                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-3 font-semibold text-white transition hover:bg-teal-700"
-                    >
-                      Explore Course
-                      <FiBookOpen />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
+        {/* Entrance Exams */}
+        {course.entranceExams && course.entranceExams.length > 0 && (
+          <div className="mt-4">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+              Entrance Exams
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {course.entranceExams.slice(0, 3).map((exam, index) => (
+                <span
+                  key={index}
+                  className="text-xs bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg font-medium"
+                >
+                  {exam}
+                </span>
+              ))}
+            </div>
           </div>
         )}
+      </div>
+
+      {/* Footer */}
+      <div className="px-6 py-4 bg-slate-50 border-t border-slate-100">
+        <button
+          onClick={() => setSelectedCourse(course)}
+          className="w-full flex items-center justify-center gap-2 bg-blue-900 hover:bg-blue-800 text-white py-3 rounded-xl text-sm font-semibold transition-all"
+        >
+          View Course Details
+          <span>→</span>
+        </button>
+      </div>
+    </div>
+  ))}
+</div>
+
+
+
       </div>
 
       {/* ================================== */}

@@ -1,3 +1,4 @@
+
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
@@ -17,8 +18,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "My Website",
-  description: "My Next.js website with Login and Signup",
+  title: {
+    default: "Doctor Council | Medical Counselling",
+    template: "%s | Doctor Council",
+  },
+  description:
+    "Doctor Council helps students explore medical courses, colleges and admission opportunities with expert counselling guidance.",
 };
 
 export default function RootLayout({
@@ -39,7 +44,11 @@ export default function RootLayout({
           {children}
         </main>
 
-        <ToastContainer />
+        <ToastContainer
+          position="top-right"
+          autoClose={3000}
+          theme="colored"
+        />
 
       </body>
     </html>

@@ -1,3 +1,4 @@
+
 "use client";
 
 import { usePathname } from "next/navigation";
@@ -6,7 +7,16 @@ import Header from "./header";
 export default function HeaderWrapper() {
   const pathname = usePathname();
 
-  if (pathname.startsWith("/user-profile")) {
+  const hideHeaderRoutes = [
+    "/user-profile",
+  ];
+
+  const shouldHideHeader = hideHeaderRoutes.some(
+    (route) =>
+      pathname === route || pathname.startsWith(`${route}/`)
+  );
+
+  if (shouldHideHeader) {
     return null;
   }
 

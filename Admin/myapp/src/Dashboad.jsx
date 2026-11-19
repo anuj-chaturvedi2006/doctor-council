@@ -20,60 +20,60 @@ const Dashboad = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const getDashboardData = async () => {
-    setLoading(true);
-    setError("");
+ 
+const getDashboardData = async () => {
+  setLoading(true);
+  setError("");
 
-    try {
-      const token = localStorage.getItem("token");
+  try {
+    const token = localStorage.getItem("token");
 
-      const config = token
-        ? { headers: { Authorization: `Bearer ${token}` } }
-        : {};
+    const config = token
+      ? { headers: { Authorization: `Bearer ${token}` } }
+      : {};
 
-      const results = await Promise.allSettled([
-        axios.get(`${API}/get-user`, config),
-        axios.get(`${API}/get-role`, config),
-      ]);
+    const results = await Promise.allSettled([
+      axios.get(`${API}/get-user`, config),
+      axios.get(`${API}/get-role`, config),
+    ]);
 
-      if (results[0].status === "fulfilled") {
-        const response = results[0].value.data;
+    if (results[0].status === "fulfilled") {
+      const response = results[0].value.data;
 
-        if (response.status) {
-          setStudents(response.user || []);
-        } else {
-          setStudents([]);
-        }
+      if (response.success) {
+        setStudents(response.user || []);
       } else {
         setStudents([]);
-        console.error("Students API:", results[0].reason);
       }
+    } else {
+      console.error("Students API:", results[0].reason);
+      setStudents([]);
+    }
 
-      if (results[1].status === "fulfilled") {
-        const response = results[1].value.data;
+    if (results[1].status === "fulfilled") {
+      const response = results[1].value.data;
 
-        if (response.status) {
-          setRoles(response.role || []);
-        } else {
-          setRoles([]);
-        }
+      if (response.success) {
+        setRoles(response.role || []);
       } else {
         setRoles([]);
-        console.error("Roles API:", results[1].reason);
       }
-
-      if (
-        results.every((result) => result.status === "rejected")
-      ) {
-        setError("Dashboard data load nahi hua. Backend aur API routes check karo.");
-      }
-    } catch (err) {
-      console.error(err);
-      setError("Dashboard data load nahi hua.");
-    } finally {
-      setLoading(false);
+    } else {
+      console.error("Roles API:", results[1].reason);
+      setRoles([]);
     }
-  };
+
+    if (results.every((result) => result.status === "rejected")) {
+      setError("Dashboard data load nahi hua.");
+    }
+  } catch (error) {
+    console.error(error);
+    setError("Dashboard data load nahi hua.");
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   useEffect(() => {
     getDashboardData();

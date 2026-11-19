@@ -95,6 +95,16 @@ const collegeSchema = new mongoose.Schema(
       enum: ["active", "inactive", "pending"],
       default: "pending",
     },
+
+ logo: {
+  type: String,
+  default: "",
+},
+
+collegeImage: {
+  type: String,
+  default: "",
+},
   },
   {
     timestamps: true,

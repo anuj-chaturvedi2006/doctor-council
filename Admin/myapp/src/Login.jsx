@@ -6,7 +6,7 @@ import "react-toastify/dist/ReactToastify.css";
 
 const Login = () => {
   const navigate = useNavigate();
-
+  
   const [form, setForm] = useState({
     email: "",
     password: "",
@@ -57,7 +57,21 @@ const Login = () => {
           JSON.stringify(res.data.user)
         );
 
-        navigate("/admin/dashboard");
+        
+const roleName = (
+  res.data.user?.role?.roleName ||
+  res.data.user?.role ||
+  ""
+)
+  .toLowerCase()
+  .replace(/[\s_-]/g, "");
+
+if (roleName === "counsellor") {
+  navigate("/admin/counselling/dashboard");
+} else {
+  navigate("/admin/dashboard");
+}
+
       } else {
         toast.error(res.data.message || "Login failed.");
       }

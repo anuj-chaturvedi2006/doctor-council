@@ -36,15 +36,40 @@ const FollowUp = require("./models/FollowUp");
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-const uploadDir = path.join(__dirname, "uploads", "profile");
 
+const uploadDir = path.join(__dirname, "uploads", "profile");
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
 
+// ================= COLLEGE UPLOAD FOLDERS =================
+
+const collegeLogoDir = path.join(
+  __dirname,
+  "uploads",
+  "colleges",
+  "logos"
+);
+
+const collegeBackgroundDir = path.join(
+  __dirname,
+  "uploads",
+  "colleges",
+  "backgrounds"
+);
+
+[collegeLogoDir, collegeBackgroundDir].forEach((dir) => {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+});
+
 app.use("/uploads",
   express.static(path.join(__dirname, "uploads"))
 );
+
+
+
 // ================= MAILER =================
 
 const mailer = nodemailer.createTransport({
@@ -56,9 +81,9 @@ const mailer = nodemailer.createTransport({
 });
 
 // ================= MONGODB =================
-
+const api=process.env.NEXT_PUBLIC_API_URL
 mongoose
-  .connect("mongodb://localhost:27017/hotolData")
+  .connect(`${api}`)
   .then(() => console.log("database connected"))
   .catch((error) => console.log("database is not connect", error));
 
@@ -100,9 +125,6 @@ const contactSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
-
-
-// ================= ROLE SCHEMA =================
 
 
 const modulePermissions = {
@@ -155,11 +177,6 @@ const modulePermissions = {
     delete: { type: Boolean, default: false },
   },
 };
-
-
-// ================= ADMIN USER SCHEMA =================
-
-//================= MODELS =================
 
 const Otp = require("./Otp")
 const Contact=mongoose.model("Contact",contactSchema)
@@ -221,9 +238,141 @@ const profileUpload = multer({
   },
 });
 
-//rozarpay testing ----------------------//
+
+const collegeUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => {
+      if (file.fieldname === "logo") {
+        cb(null, collegeLogoDir);
+      } else if (file.fieldname === "backgroundImage") {
+        cb(null, collegeBackgroundDir);
+      } else {
+        cb(new Error("Invalid image field"));
+      }
+    },
+
+    filename: (req, file, cb) => {
+      const uniqueName =
+        Date.now() +
+        "-" +
+        Math.round(Math.random() * 1e9) +
+        path.extname(file.originalname).toLowerCase();
+
+      cb(null, uniqueName);
+    },
+  }),
+
+  limits: {
+    fileSize: 5 * 1024 * 1024,
+  },
+
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+    ];
+
+    if (allowedTypes.includes(file.mimetype)) {
+      return cb(null, true);
+    }
+
+    cb(new Error("Only JPG, PNG and WEBP images are allowed"));
+  },
+});
 
 
+
+const defaultMBBSPackages = [
+  {
+    name: "Basic MBBS Counselling",
+    price: 999,
+    durationDays: 30,
+    description:
+      "Basic NEET UG and MBBS admission counselling assistance.",
+    features: [
+      "NEET UG Counselling Guidance",
+      "Basic Medical College Information",
+      "MBBS Admission Guidance",
+      "Counselling Process Support",
+      "Document Checklist",
+    ],
+    status: "active",
+  },
+  {
+    name: "Standard MBBS Counselling",
+    price: 2999,
+    durationDays: 60,
+    description:
+      "Personalized MBBS college selection and counselling assistance.",
+    features: [
+      "All Basic Package Benefits",
+      "Personalized College Selection",
+      "All India Quota Guidance",
+      "State Quota Guidance",
+      "Choice Filling Assistance",
+      "Round-wise Counselling Guidance",
+    ],
+    status: "active",
+  },
+  {
+    name: "Premium MBBS Counselling",
+    price: 5999,
+    durationDays: 90,
+    description:
+      "Complete personalized MBBS admission counselling support.",
+    features: [
+      "All Standard Package Benefits",
+      "Dedicated Counsellor Assistance",
+      "Personalized College Preference List",
+      "Choice Filling and Locking Support",
+      "Document Verification Guidance",
+      "Admission Process Assistance",
+      "Priority Counselling Support",
+    ],
+    status: "active",
+  },
+];
+
+// Create three packages without duplicates
+app.post("/seed-mbbs-packages", async (req, res) => {
+  try {
+    const createdPackages = [];
+
+    for (const pkg of defaultMBBSPackages) {
+      const packageData = await Package.findOneAndUpdate(
+        { name: pkg.name },
+        { $set: pkg },
+        {
+          new: true,
+          upsert: true,
+          runValidators: true,
+          setDefaultsOnInsert: true,
+        }
+      );
+
+      createdPackages.push(packageData);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "MBBS counselling packages created successfully",
+      count: createdPackages.length,
+      data: createdPackages,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
+
+const isValidPackageId = (id) =>
+  mongoose.Types.ObjectId.isValid(id);
+
+// CREATE PACKAGE
 app.post("/create-package", async (req, res) => {
   try {
     const {
@@ -234,19 +383,39 @@ app.post("/create-package", async (req, res) => {
       features,
     } = req.body;
 
-    if (!name || !price || !durationDays) {
+    if (
+      typeof name !== "string" ||
+      !name.trim() ||
+      price === undefined ||
+      !Number.isFinite(Number(price)) ||
+      Number(price) <= 0 ||
+      !Number.isInteger(Number(durationDays)) ||
+      Number(durationDays) <= 0
+    ) {
       return res.status(400).json({
         success: false,
-        message: "Name, price and duration are required",
+        message: "Valid name, price and duration are required",
+      });
+    }
+
+    if (
+      features !== undefined &&
+      (!Array.isArray(features) ||
+        !features.every((item) => typeof item === "string"))
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Features must be an array of strings",
       });
     }
 
     const newPackage = await Package.create({
-      name,
-      price,
-      durationDays,
-      description,
-      features,
+      name: name.trim(),
+      price: Number(price),
+      durationDays: Number(durationDays),
+      description: description || "",
+      features: features || [],
+      status: "active",
     });
 
     return res.status(201).json({
@@ -263,11 +432,12 @@ app.post("/create-package", async (req, res) => {
 });
 
 
+// GET ALL ACTIVE PACKAGES
 app.get("/get-packages", async (req, res) => {
   try {
     const packages = await Package.find({
       status: "active",
-    }).sort({ createdAt: -1 });
+    }).sort({ price: 1 });
 
     return res.status(200).json({
       success: true,
@@ -283,10 +453,19 @@ app.get("/get-packages", async (req, res) => {
 });
 
 
-
+// GET SINGLE PACKAGE
 app.get("/get-package/:id", async (req, res) => {
   try {
-    const packageData = await Package.findById(req.params.id);
+    const { id } = req.params;
+
+    if (!isValidPackageId(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid package ID",
+      });
+    }
+
+    const packageData = await Package.findById(id);
 
     if (!packageData) {
       return res.status(404).json({
@@ -308,12 +487,113 @@ app.get("/get-package/:id", async (req, res) => {
 });
 
 
-
+// UPDATE PACKAGE
 app.put("/update-package/:id", async (req, res) => {
   try {
+    const { id } = req.params;
+
+    if (!isValidPackageId(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid package ID",
+      });
+    }
+
+    const allowedFields = [
+      "name",
+      "price",
+      "durationDays",
+      "description",
+      "features",
+      "status",
+    ];
+
+    const updateData = {};
+
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) {
+        updateData[field] = req.body[field];
+      }
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No valid fields provided for update",
+      });
+    }
+
+    if (
+      updateData.name !== undefined &&
+      (typeof updateData.name !== "string" ||
+        !updateData.name.trim())
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid package name",
+      });
+    }
+
+    if (updateData.name) {
+      updateData.name = updateData.name.trim();
+    }
+
+    if (
+      updateData.price !== undefined &&
+      (!Number.isFinite(Number(updateData.price)) ||
+        Number(updateData.price) <= 0)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid package price",
+      });
+    }
+
+    if (updateData.price !== undefined) {
+      updateData.price = Number(updateData.price);
+    }
+
+    if (
+      updateData.durationDays !== undefined &&
+      (!Number.isInteger(Number(updateData.durationDays)) ||
+        Number(updateData.durationDays) <= 0)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid package duration",
+      });
+    }
+
+    if (updateData.durationDays !== undefined) {
+      updateData.durationDays = Number(updateData.durationDays);
+    }
+
+    if (
+      updateData.features !== undefined &&
+      (!Array.isArray(updateData.features) ||
+        !updateData.features.every(
+          (item) => typeof item === "string"
+        ))
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Features must be an array of strings",
+      });
+    }
+
+    if (
+      updateData.status !== undefined &&
+      !["active", "inactive"].includes(updateData.status)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Status must be active or inactive",
+      });
+    }
+
     const updatedPackage = await Package.findByIdAndUpdate(
-      req.params.id,
-      req.body,
+      id,
+      { $set: updateData },
       {
         new: true,
         runValidators: true,
@@ -341,10 +621,19 @@ app.put("/update-package/:id", async (req, res) => {
 });
 
 
-
+// DELETE / DEACTIVATE PACKAGE
 app.delete("/delete-package/:id", async (req, res) => {
   try {
-    const packageData = await Package.findById(req.params.id);
+    const { id } = req.params;
+
+    if (!isValidPackageId(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid package ID",
+      });
+    }
+
+    const packageData = await Package.findById(id);
 
     if (!packageData) {
       return res.status(404).json({
@@ -364,10 +653,11 @@ app.delete("/delete-package/:id", async (req, res) => {
       return res.status(200).json({
         success: true,
         message: "Package deactivated because purchase history exists",
+        data: packageData,
       });
     }
 
-    await Package.findByIdAndDelete(req.params.id);
+    await Package.findByIdAndDelete(id);
 
     return res.status(200).json({
       success: true,
@@ -382,117 +672,114 @@ app.delete("/delete-package/:id", async (req, res) => {
 });
 
 
+app.post("/student/create-package-order",
+  verifyToken,
+  async (req, res) => {
+    try {
+      const { packageId } = req.body;
 
-app.post("/student/create-package-order", verifyToken, async (req, res) => {
-  try {
-    const { packageId } = req.body;
+      if (!packageId || !mongoose.Types.ObjectId.isValid(packageId)) {
+        return res.status(400).json({
+          success: false,
+          message: "Valid package ID is required",
+        });
+      }
 
-    if (!packageId) {
-      return res.status(400).json({
-        success: false,
-        message: "Package ID is required",
+      if (
+        !process.env.RAZORPAY_KEY_ID ||
+        !process.env.RAZORPAY_KEY_SECRET
+      ) {
+        return res.status(500).json({
+          success: false,
+          message: "Razorpay keys are not configured",
+        });
+      }
+
+      const packageData = await Package.findOne({
+        _id: packageId,
+        status: "active",
       });
-    }
 
-    if (!mongoose.Types.ObjectId.isValid(packageId)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid package ID",
+      if (!packageData) {
+        return res.status(404).json({
+          success: false,
+          message: "Package not found or inactive",
+        });
+      }
+
+      const amountPaise = Math.round(
+        Number(packageData.price) * 100
+      );
+
+      if (
+        !Number.isSafeInteger(amountPaise) ||
+        amountPaise <= 0
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid package price",
+        });
+      }
+
+      // Create Razorpay Order
+      const order = await razorpay.orders.create({
+        amount: amountPaise,
+        currency: "INR",
+        receipt: `pkg_${Date.now()}_${Math.floor(
+          Math.random() * 10000
+        )}`,
+        notes: {
+          packageId: packageData._id.toString(),
+          studentId: req.userId.toString(),
+        },
       });
-    }
 
-    if (
-      !process.env.RAZORPAY_KEY_ID ||
-      !process.env.RAZORPAY_KEY_SECRET
-    ) {
+      // Save Student Package
+      const studentPackage = await StudentPackage.create({
+        student: req.userId,
+        package: packageData._id,
+        packageName: packageData.name,
+        amountPaise: order.amount,
+        currency: order.currency,
+        razorpayOrderId: order.id,
+        paymentStatus: "pending",
+        packageStatus: "inactive",
+      });
+
+      return res.status(201).json({
+        success: true,
+        message: "Package order created successfully",
+        data: {
+          studentPackageId: studentPackage._id,
+          orderId: order.id,
+          amount: order.amount,
+          currency: order.currency,
+          packageName: packageData.name,
+          key: process.env.RAZORPAY_KEY_ID,
+        },
+      });
+    } catch (error) {
+      console.error("Create package order error:", error);
+
       return res.status(500).json({
         success: false,
-        message: "Razorpay keys are not configured",
+        message: error.message,
       });
     }
-
-    // 1. Get package from database
-    const packageData = await Package.findOne({
-      _id: packageId,
-      status: "active",
-    });
-
-    if (!packageData) {
-      return res.status(404).json({
-        success: false,
-        message: "Package not found or inactive",
-      });
-    }
-
-    // 2. Convert rupees into paise
-    const amountPaise = Math.round(
-      Number(packageData.price) * 100
-    );
-
-    if (!Number.isSafeInteger(amountPaise) || amountPaise <= 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid package price",
-      });
-    }
-
-    // 3. Create Razorpay order
-    const order = await razorpay.orders.create({
-      amount: amountPaise,
-      currency: "INR",
-      receipt: `pkg_${Date.now()}`,
-      notes: {
-        packageId: packageData._id.toString(),
-        studentId: req.userId.toString(),
-      },
-    });
-
-    // 4. Save pending purchase in MongoDB
-    const studentPackage = await StudentPackage.create({
-      student: req.userId,
-      package: packageData._id,
-      packageName: packageData.name,
-      amountPaise,
-      currency: "INR",
-      razorpayOrderId: order.id,
-      paymentStatus: "pending",
-      packageStatus: "inactive",
-    });
-
-    // 5. Send order details to frontend
-    return res.status(201).json({
-      success: true,
-      message: "Package order created successfully",
-      data: {
-        studentPackageId: studentPackage._id,
-        orderId: order.id,
-        amount: order.amount,
-        currency: order.currency,
-        packageName: packageData.name,
-        key: process.env.RAZORPAY_KEY_ID,
-      },
-    });
-
-  } catch (error) {
-    console.error("Create package order error:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: error.message,
-    });
   }
-});
+);
+
 
 
 app.post("/verify-payment", verifyToken, async (req, res) => {
   try {
+    console.log("VERIFY PAYMENT BODY:", req.body);
     const {
       razorpay_order_id,
       razorpay_payment_id,
       razorpay_signature,
     } = req.body;
 
-    // 1. Required fields check
     if (
       !razorpay_order_id ||
       !razorpay_payment_id ||
@@ -504,17 +791,14 @@ app.post("/verify-payment", verifyToken, async (req, res) => {
       });
     }
 
-console.log("Received Order ID:", razorpay_order_id);
-console.log("Logged In Student ID:", req.userId);
+    if (!/^[a-f0-9]{64}$/i.test(razorpay_signature)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid payment signature format",
+      });
+    }
 
-const orderCheck = await StudentPackage.findOne({
-  razorpayOrderId: razorpay_order_id,
-});
-
-console.log("Order Found:", orderCheck);
-console.log("Order Student ID:", orderCheck?.student?.toString());
-
-    // 2. Find this order for the logged-in student
+    // Find order belonging to logged-in student
     const studentPackage = await StudentPackage.findOne({
       razorpayOrderId: razorpay_order_id,
       student: req.userId,
@@ -527,9 +811,11 @@ console.log("Order Student ID:", orderCheck?.student?.toString());
       });
     }
 
-    // 3. Already-paid order check (idempotency)
+    // Already verified
     if (studentPackage.paymentStatus === "paid") {
-      if (studentPackage.razorpayPaymentId === razorpay_payment_id) {
+      if (
+        studentPackage.razorpayPaymentId === razorpay_payment_id
+      ) {
         return res.status(200).json({
           success: true,
           message: "Payment already verified",
@@ -543,19 +829,33 @@ console.log("Order Student ID:", orderCheck?.student?.toString());
       });
     }
 
-    // 4. Generate expected Razorpay signature
+    // Verify Razorpay signature
     const generatedSignature = crypto
-      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
-      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+      .createHmac(
+        "sha256",
+        process.env.RAZORPAY_KEY_SECRET
+      )
+      .update(
+        `${razorpay_order_id}|${razorpay_payment_id}`
+      )
       .digest("hex");
 
-    // 5. Compare signatures safely
-    const generatedBuffer = Buffer.from(generatedSignature, "hex");
-    const receivedBuffer = Buffer.from(razorpay_signature, "hex");
+    const generatedBuffer = Buffer.from(
+      generatedSignature,
+      "hex"
+    );
+
+    const receivedBuffer = Buffer.from(
+      razorpay_signature,
+      "hex"
+    );
 
     if (
       generatedBuffer.length !== receivedBuffer.length ||
-      !crypto.timingSafeEqual(generatedBuffer, receivedBuffer)
+      !crypto.timingSafeEqual(
+        generatedBuffer,
+        receivedBuffer
+      )
     ) {
       return res.status(400).json({
         success: false,
@@ -563,7 +863,7 @@ console.log("Order Student ID:", orderCheck?.student?.toString());
       });
     }
 
-    // 6. Verify payment directly with Razorpay
+    // Fetch actual payment from Razorpay
     const payment = await razorpay.payments.fetch(
       razorpay_payment_id
     );
@@ -582,7 +882,7 @@ console.log("Order Student ID:", orderCheck?.student?.toString());
       });
     }
 
-    // 7. Verify amount and currency
+    // Check amount and currency
     if (
       payment.amount !== studentPackage.amountPaise ||
       payment.currency !== studentPackage.currency
@@ -593,7 +893,6 @@ console.log("Order Student ID:", orderCheck?.student?.toString());
       });
     }
 
-    // 8. Get package duration
     const packageData = studentPackage.package;
 
     if (!packageData) {
@@ -605,34 +904,73 @@ console.log("Order Student ID:", orderCheck?.student?.toString());
 
     const durationDays = Number(packageData.durationDays);
 
-    if (!Number.isFinite(durationDays) || durationDays <= 0) {
+    if (
+      !Number.isInteger(durationDays) ||
+      durationDays <= 0
+    ) {
       return res.status(400).json({
         success: false,
         message: "Invalid package duration",
       });
     }
 
-    // 9. Activate package
+    // Generate package validity
     const startDate = new Date();
     const expiryDate = new Date(startDate);
 
-    expiryDate.setDate(expiryDate.getDate() + durationDays);
+    expiryDate.setDate(
+      expiryDate.getDate() + durationDays
+    );
 
-    studentPackage.razorpayPaymentId = razorpay_payment_id;
-    studentPackage.razorpaySignature = razorpay_signature;
-    studentPackage.paymentStatus = "paid";
-    studentPackage.packageStatus = "active";
-    studentPackage.startDate = startDate;
-    studentPackage.expiryDate = expiryDate;
+    // Atomic update prevents duplicate activation
+    const updatedPackage = await StudentPackage.findOneAndUpdate(
+      {
+        _id: studentPackage._id,
+        paymentStatus: { $ne: "paid" },
+      },
+      {
+        $set: {
+          razorpayPaymentId: razorpay_payment_id,
+          razorpaySignature: razorpay_signature,
+          paymentStatus: "paid",
+          packageStatus: "active",
+          startDate,
+          expiryDate,
+        },
+      },
+      {
+        new: true,
+        runValidators: true,
+      }
+    );
 
-    await studentPackage.save();
+    if (!updatedPackage) {
+      const existing = await StudentPackage.findById(
+        studentPackage._id
+      );
+
+      if (
+        existing?.paymentStatus === "paid" &&
+        existing.razorpayPaymentId === razorpay_payment_id
+      ) {
+        return res.status(200).json({
+          success: true,
+          message: "Payment already verified",
+          data: existing,
+        });
+      }
+
+      return res.status(409).json({
+        success: false,
+        message: "Package payment status has changed",
+      });
+    }
 
     return res.status(200).json({
       success: true,
       message: "Payment verified and package activated successfully",
-      data: studentPackage,
+      data: updatedPackage,
     });
-
   } catch (error) {
     console.error("Verify payment error:", error);
 
@@ -644,134 +982,153 @@ console.log("Order Student ID:", orderCheck?.student?.toString());
 });
 
 
-// Get logged-in student's packages
-5
-app.get("/student/my-package", verifyToken, async (req, res) => {
-  try {
-    const studentId = req.userId;
-    const currentDate = new Date();
+app.get("/student/my-package",
+  verifyToken,
+  async (req, res) => {
+    try {
+      const studentId = req.userId;
+      const currentDate = new Date();
 
-    // Automatically expire packages whose validity has ended
-    await StudentPackage.updateMany(
-      {
-        student: studentId,
-        packageStatus: "active",
-        expiryDate: { $lte: currentDate },
-      },
-      {
-        $set: {
-          packageStatus: "expired",
+      // Expire old packages
+      await StudentPackage.updateMany(
+        {
+          student: studentId,
+          packageStatus: "active",
+          expiryDate: { $lte: currentDate },
         },
+        {
+          $set: {
+            packageStatus: "expired",
+          },
+        }
+      );
+
+      // Fetch all purchased packages
+      const packages = await StudentPackage.find({
+        student: studentId,
+      })
+        .populate("package")
+        .sort({ createdAt: -1 });
+
+      return res.status(200).json({
+        success: true,
+        message: "Student packages fetched successfully",
+        count: packages.length,
+        data: packages,
+      });
+    } catch (error) {
+      console.error("My package error:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+);
+
+
+
+app.post("/student/retry-package-order",
+  verifyToken,
+  async (req, res) => {
+    try {
+      const { studentPackageId } = req.body;
+
+      if (
+        !studentPackageId ||
+        !mongoose.Types.ObjectId.isValid(studentPackageId)
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Valid student package ID is required",
+        });
       }
-    );
 
-    // Get student's purchased packages
-    const packages = await StudentPackage.find({
-      student: studentId,
-    })
-      .populate("package")
-      .sort({ createdAt: -1 });
+      const studentPackage = await StudentPackage.findOne({
+        _id: studentPackageId,
+        student: req.userId,
+        paymentStatus: "pending",
+        packageStatus: "inactive",
+      }).populate("package");
 
-    return res.status(200).json({
-      success: true,
-      message: "Student packages fetched successfully",
-      data: packages,
-    });
+      if (!studentPackage) {
+        return res.status(404).json({
+          success: false,
+          message: "Pending package not found",
+        });
+      }
 
-  } catch (error) {
-    console.error("My package error:", error);
+      const packageData = studentPackage.package;
 
-    return res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+      if (
+        !packageData ||
+        packageData.status !== "active"
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Package is not available",
+        });
+      }
+
+      const amount = Math.round(
+        Number(packageData.price) * 100
+      );
+
+      if (
+        !Number.isSafeInteger(amount) ||
+        amount <= 0
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid package amount",
+        });
+      }
+
+      // Create new Razorpay order
+      const order = await razorpay.orders.create({
+        amount,
+        currency: "INR",
+        receipt: `retry_${Date.now()}_${Math.floor(
+          Math.random() * 10000
+        )}`,
+        notes: {
+          studentId: req.userId.toString(),
+          studentPackageId: studentPackage._id.toString(),
+        },
+      });
+
+      // Update existing pending record
+      studentPackage.razorpayOrderId = order.id;
+      studentPackage.amountPaise = order.amount;
+      studentPackage.currency = order.currency;
+
+      await studentPackage.save();
+
+      return res.status(200).json({
+        success: true,
+        message: "Retry payment order created successfully",
+        data: {
+          studentPackageId: studentPackage._id,
+          orderId: order.id,
+          amount: order.amount,
+          currency: order.currency,
+          packageName: studentPackage.packageName,
+          key: process.env.RAZORPAY_KEY_ID,
+        },
+      });
+    } catch (error) {
+      console.error("Retry payment error:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
   }
-});
+);
 
 
-app.post("/student/retry-package-order", verifyToken, async (req, res) => {
-  try {
-    const { studentPackageId } = req.body;
-
-    if (!studentPackageId) {
-      return res.status(400).json({
-        success: false,
-        message: "Student package ID is required",
-      });
-    }
-
-    // Student ka pending package find karo
-    const studentPackage = await StudentPackage.findOne({
-      _id: studentPackageId,
-      student: req.userId,
-      paymentStatus: "pending",
-      packageStatus: "inactive",
-    }).populate("package");
-
-    if (!studentPackage) {
-      return res.status(404).json({
-        success: false,
-        message: "Pending package not found",
-      });
-    }
-
-    const packageData = studentPackage.package;
-
-    if (!packageData || packageData.status !== "active") {
-      return res.status(400).json({
-        success: false,
-        message: "This package is not available",
-      });
-    }
-
-    // Amount rupees se paise mein convert karo
-    const amount = Math.round(Number(packageData.price) * 100);
-
-    if (!Number.isSafeInteger(amount) || amount <= 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid package amount",
-      });
-    }
-
-    // Naya Razorpay order create karo
-    const order = await razorpay.orders.create({
-      amount,
-      currency: "INR",
-      receipt: `retry_${Date.now()}`,
-      notes: {
-        studentId: req.userId.toString(),
-        studentPackageId: studentPackage._id.toString(),
-      },
-    });
-
-    // Existing pending record mein naya order ID save karo
-    studentPackage.razorpayOrderId = order.id;
-    studentPackage.amountPaise = amount;
-    studentPackage.currency = "INR";
-
-    await studentPackage.save();
-
-    return res.status(200).json({
-      success: true,
-      message: "Retry payment order created successfully",
-      orderId: order.id,
-      amount: order.amount,
-      currency: order.currency,
-      packageName: studentPackage.packageName,
-      key: process.env.RAZORPAY_KEY_ID,
-      studentPackageId: studentPackage._id,
-    });
-
-  } catch (error) {
-    console.error("Retry payment error:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-});
 
 //------------------------------//
 
@@ -1772,31 +2129,61 @@ app.post("/admin-user/bulk-import",
 );
 
 //get user
+
 app.get("/get-user",
   verifyToken,
   requirePermission("students", "view"),
   async (req, res) => {
     try {
-      const getData = await User1.find()
+      const studentRole = await Role.findOne({
+        roleName: { $regex: /^student$/i },
+      });
+
+      if (!studentRole) {
+        return res.status(404).json({
+          success: false,
+          message: "Student role not found",
+        });
+      }
+
+      const getData = await User1.find({
+        role: studentRole._id,
+      })
         .select("-password")
         .populate("role", "roleName status")
         .sort({ createdAt: -1 });
 
+      const totalStudents = getData.length;
+
+      const activeStudents = getData.filter(
+        (user) => user.status === "active"
+      ).length;
+
+      const inactiveStudents = getData.filter(
+        (user) => user.status === "inactive"
+      ).length;
+
       return res.status(200).json({
         success: true,
-        message: "Data fetched successfully",
+        message: "Students fetched successfully",
         user: getData,
+        statistics: {
+          totalStudents,
+          activeStudents,
+          inactiveStudents,
+        },
       });
     } catch (error) {
-      console.error("Get user error:", error);
+      console.error("Get students error:", error);
 
       return res.status(500).json({
         success: false,
-        message: "Data not found",
+        message: "Students data not found",
       });
     }
-  },
+  }
 );
+
 // EDIT STUDENT
 app.post("/admin-edit",
   verifyToken,
@@ -2034,26 +2421,33 @@ app.post("/admin-delete",
 
 // add college route
 
-app.post("/add-college",
+
+
+app.post(
+  "/add-college",
   verifyToken,
- requirePermission("colleges", "create"),
+  requirePermission("colleges", "create"),
+  collegeUpload.fields([
+    { name: "logo", maxCount: 1 },
+    { name: "backgroundImage", maxCount: 1 },
+  ]),
   async (req, res) => {
     try {
       const {
         name,
         slug,
-        logo,
         description,
         collegeType,
         ownership,
         establishedYear,
-        location,
         website,
-        contact,
         status,
       } = req.body;
 
-      // Validation
+      // Parse location and contact
+      const locationData = JSON.parse(req.body.location || "{}");
+      const contactData = JSON.parse(req.body.contact || "{}");
+
       if (!name) {
         return res.send({
           message: "College name is required",
@@ -2089,7 +2483,6 @@ app.post("/add-college",
           .replace(/[^a-z0-9]+/g, "-")
           .replace(/^-+|-+$/g, "");
 
-      // Duplicate slug check
       const existingSlug = await College.findOne({
         slug: collegeSlug,
       });
@@ -2101,22 +2494,33 @@ app.post("/add-college",
         });
       }
 
+      // Logo path
+      const logo = req.files?.logo?.[0]
+        ? `/uploads/colleges/logos/${req.files.logo[0].filename}`
+        : "";
+
+      // Background image path
+      const collegeImage = req.files?.backgroundImage?.[0]
+        ? `/uploads/colleges/backgrounds/${req.files.backgroundImage[0].filename}`
+        : "";
+
       // Create college
       const college = await College.create({
         name: name.trim(),
         slug: collegeSlug,
         logo,
+        collegeImage,
         description,
         collegeType,
         ownership,
         establishedYear,
-        location,
+        location: locationData,
         website,
-        contact,
+        contact: contactData,
         status: status || "pending",
       });
 
-      res.send({
+      return res.send({
         message: "College added successfully",
         status: true,
         college,
@@ -2124,13 +2528,16 @@ app.post("/add-college",
     } catch (error) {
       console.log(error);
 
-      res.send({
+      return res.send({
         message: "College not added",
         status: false,
+        error: error.message,
       });
     }
-  },
+  }
 );
+
+
 
 //get college route
 
@@ -2213,25 +2620,32 @@ app.get("/get-college/:id", async (req, res) => {
   }
 });
 //edit college route
-app.post("/edit-college",
+
+
+app.post(
+  "/edit-college",
   verifyToken,
   requirePermission("colleges", "update"),
+  collegeUpload.fields([
+    { name: "logo", maxCount: 1 },
+    { name: "backgroundImage", maxCount: 1 },
+  ]),
   async (req, res) => {
     try {
       const {
         _id,
         name,
         slug,
-        logo,
         description,
         collegeType,
         ownership,
         establishedYear,
-        location,
         website,
-        contact,
         status,
       } = req.body;
+
+      const locationData = JSON.parse(req.body.location || "{}");
+      const contactData = JSON.parse(req.body.contact || "{}");
 
       if (!_id) {
         return res.send({
@@ -2254,7 +2668,16 @@ app.post("/edit-college",
         });
       }
 
-      // Check duplicate college name
+      const existingCollege = await College.findById(_id);
+
+      if (!existingCollege) {
+        return res.send({
+          message: "College not found",
+          status: false,
+        });
+      }
+
+      // Duplicate name check
       const duplicateCollege = await College.findOne({
         name: name.trim(),
         _id: { $ne: _id },
@@ -2267,68 +2690,74 @@ app.post("/edit-college",
         });
       }
 
-      // Check duplicate slug
-      if (slug) {
-        const duplicateSlug = await College.findOne({
-          slug: slug,
-          _id: { $ne: _id },
-        });
+      // Generate slug if not provided
+      const collegeSlug =
+        slug ||
+        name
+          .toLowerCase()
+          .trim()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "");
 
-        if (duplicateSlug) {
-          return res.send({
-            message: "College slug already exists",
-            status: false,
-          });
-        }
-      }
+      // Duplicate slug check
+      const duplicateSlug = await College.findOne({
+        slug: collegeSlug,
+        _id: { $ne: _id },
+      });
 
-      const updateCollege = await College.updateOne(
-        { _id: _id },
-        {
-          $set: {
-            name: name.trim(),
-            slug,
-            logo,
-            description,
-            collegeType,
-            ownership,
-            establishedYear,
-            location,
-            website,
-            contact,
-            status,
-          },
-        },
-      );
-
-      if (updateCollege.matchedCount === 0) {
+      if (duplicateSlug) {
         return res.send({
-          message: "College not found",
+          message: "College slug already exists",
           status: false,
         });
       }
 
-      const updatedCollege = await College.findById(_id);
+      // Update text fields
+      existingCollege.name = name.trim();
+      existingCollege.slug = collegeSlug;
+      existingCollege.description = description;
+      existingCollege.collegeType = collegeType;
+      existingCollege.ownership = ownership;
+      existingCollege.establishedYear = establishedYear;
+      existingCollege.location = locationData;
+      existingCollege.website = website;
+      existingCollege.contact = contactData;
+      existingCollege.status = status;
 
-      res.send({
+      // Update logo only if new logo uploaded
+      if (req.files?.logo?.[0]) {
+        existingCollege.logo =
+          `/uploads/colleges/logos/${req.files.logo[0].filename}`;
+      }
+
+      // Update background only if new background uploaded
+      if (req.files?.backgroundImage?.[0]) {
+        existingCollege.collegeImage =
+          `/uploads/colleges/backgrounds/${req.files.backgroundImage[0].filename}`;
+      }
+
+      await existingCollege.save();
+
+      return res.send({
         message: "College updated successfully",
         status: true,
-        college: updatedCollege,
+        college: existingCollege,
       });
     } catch (error) {
       console.log(error);
 
-      res.send({
+      return res.send({
         message: "College not updated",
         status: false,
+        error: error.message,
       });
     }
-  },
+  }
 );
 
+
 // DELETE COLLEGE ROUTE
-app.post(
-  "/delete-college",
+app.post("/delete-college",
   verifyToken,
   requirePermission("colleges", "delete"),
   async (req, res) => {
@@ -2854,8 +3283,7 @@ app.get("/student/get-streams", verifyToken, async (req, res) => {
 
 // GET STREAM BY ID
 
-app.get(
-  "/get-stream/:id",
+app.get("/get-stream/:id",
   verifyToken,
     requirePermission("streams","view"),
   async (req, res) => {
@@ -2894,8 +3322,7 @@ app.get(
 
 // CREATE STREAM
 
-app.post(
-  "/create-stream",
+app.post("/create-stream",
   verifyToken,
     requirePermission("streams","add"),
   async (req, res) => {
@@ -2993,8 +3420,7 @@ app.post(
 
 // UPDATE STREAM
 
-app.put(
-  "/update-stream/:id",
+app.put("/update-stream/:id",
   verifyToken,
    requirePermission("streams","update"),
   async (req, res) => {
@@ -3147,8 +3573,7 @@ app.put(
 
 // DELETE STREAM
 
-app.delete(
-  "/delete-stream/:id",
+app.delete("/delete-stream/:id",
   verifyToken,
     requirePermission("streams","delete"),
   async (req, res) => {
@@ -3310,8 +3735,7 @@ const handleDegreeError = (res, error) => {
 
 // create degree
 
-app.post(
-  "/create-degree",
+app.post("/create-degree",
   verifyToken,
   requirePermission("degrees", "create"),
   async (req, res) => {
@@ -3447,8 +3871,7 @@ app.post(
 
 // ==================== GET ALL DEGREES + FILTER ====================
 
-app.get(
-  "/get-degrees",
+app.get("/get-degrees",
   verifyToken,
   requirePermission("degrees","view"),
   async (req, res) => {
@@ -3520,8 +3943,7 @@ app.get(
 
 // ==================== GET DEGREE BY ID ====================
 
-app.get(
-  "/get-degree/:id",
+app.get("/get-degree/:id",
   verifyToken,
   requirePermission("degrees","view"),
   async (req, res) => {
@@ -3559,10 +3981,9 @@ app.get(
 
 // ==================== UPDATE DEGREE ====================
 
-app.put(
-  "/update-degree/:id",
+app.put("/update-degree/:id",
   verifyToken,
-  requirePermission("degree","update"),
+  requirePermission("degrees","update"),
   async (req, res) => {
     try
      {
@@ -3745,8 +4166,7 @@ app.put(
 // ==================== DELETE DEGREE ====================
 
 
-app.delete(
-  "/delete-degree/:id",
+app.delete("/delete-degree/:id",
   verifyToken,
   requirePermission("degrees", "delete"),
   async (req, res) => {
@@ -5253,6 +5673,7 @@ app.delete("/delete-contact/:id", async (req, res) => {
 });
 // Add role permissions 
 
+
 const MODULES = [
   "students",
   "colleges",
@@ -5263,9 +5684,16 @@ const MODULES = [
   "streams",
   "specializations",
   "emailTemplates",
+  "contacts",
 ];
 
-const ACTIONS = ["create", "view", "update", "delete"];
+const ACTIONS = [
+  "create",
+  "view",
+  "update",
+  "delete",
+];
+
 
 const createDefaultPermissions = () => {
   const permissions = {};
@@ -5363,8 +5791,7 @@ const normalizePermissions = (permissions = {}) => {
 // ADD ROLE
 
 
-app.post("/add-role",
-  verifyToken,
+app.post("/add-role",verifyToken,
   requireRole("superAdmin"),
   async (req, res) => {
     try {
@@ -5802,6 +6229,305 @@ app.post("/create-user", async (req, res) => {
     });
   }
 });
+
+
+// ========================================
+// COUNSELLOR MANAGEMENT ACCESS MIDDLEWARE
+// Only Admin and SuperAdmin
+// ========================================
+
+const counsellorManagementAccess = async (req, res, next) => {
+  try {
+    const admin = await User1.findById(req.userId).populate("role");
+
+    if (!admin) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const roleName = admin.role?.roleName
+      ?.toLowerCase()
+      .replace(/[\s_-]/g, "");
+
+    if (!["admin", "superadmin"].includes(roleName)) {
+      return res.status(403).json({
+        success: false,
+        message: "Only Admin and SuperAdmin can manage counsellors",
+      });
+    }
+
+    next();
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+
+// ========================================
+// 1. GET ALL COUNSELLORS
+// ========================================
+
+app.get(
+  "/get-counsellors",
+  verifyToken,
+  counsellorManagementAccess,
+  async (req, res) => {
+    try {
+      const counsellorRole = await Role.findOne({
+        roleName: { $regex: /^counsellor$/i },
+      });
+
+      if (!counsellorRole) {
+        return res.status(404).json({
+          success: false,
+          message: "Counsellor role not found",
+        });
+      }
+
+      const counsellors = await User1.find({
+        role: counsellorRole._id,
+      })
+        .select("-password")
+        .populate("role", "roleName")
+        .sort({ createdAt: -1 });
+
+      res.status(200).json({
+        success: true,
+        message: "Counsellors fetched successfully",
+        total: counsellors.length,
+        data: counsellors,
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+);
+
+
+// ========================================
+// 2. CREATE COUNSELLOR
+// ========================================
+
+app.post(
+  "/create-counsellor",
+  verifyToken,
+  counsellorManagementAccess,
+  async (req, res) => {
+    try {
+      const { name, email, phone, password } = req.body;
+
+      if (!name || !email || !password) {
+        return res.status(400).json({
+          success: false,
+          message: "Name, email and password are required",
+        });
+      }
+
+      const normalizedEmail = email.toLowerCase().trim();
+
+      const existingUser = await User1.findOne({
+        email: normalizedEmail,
+      });
+
+      if (existingUser) {
+        return res.status(400).json({
+          success: false,
+          message: "Email already exists",
+        });
+      }
+
+      const counsellorRole = await Role.findOne({
+        roleName: { $regex: /^counsellor$/i },
+        status: "active",
+      });
+
+      if (!counsellorRole) {
+        return res.status(404).json({
+          success: false,
+          message: "Active Counsellor role not found",
+        });
+      }
+
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      const newCounsellor = await User1.create({
+        name: name.trim(),
+        email: normalizedEmail,
+        phone,
+        password: hashedPassword,
+        role: counsellorRole._id,
+        status: "active",
+      });
+
+      res.status(201).json({
+        success: true,
+        message: "Counsellor created successfully",
+        data: {
+          _id: newCounsellor._id,
+          name: newCounsellor.name,
+          email: newCounsellor.email,
+          phone: newCounsellor.phone,
+          role: counsellorRole.roleName,
+          status: newCounsellor.status,
+        },
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+);
+
+
+// ========================================
+// 3. UPDATE COUNSELLOR
+// ========================================
+
+app.put(
+  "/update-counsellor/:id",
+  verifyToken,
+  counsellorManagementAccess,
+  async (req, res) => {
+    try {
+      const { name, email, phone, password } = req.body;
+
+      const counsellorRole = await Role.findOne({
+        roleName: { $regex: /^counsellor$/i },
+      });
+
+      if (!counsellorRole) {
+        return res.status(404).json({
+          success: false,
+          message: "Counsellor role not found",
+        });
+      }
+
+      const counsellor = await User1.findOne({
+        _id: req.params.id,
+        role: counsellorRole._id,
+      });
+
+      if (!counsellor) {
+        return res.status(404).json({
+          success: false,
+          message: "Counsellor not found",
+        });
+      }
+
+      if (email) {
+        const normalizedEmail = email.toLowerCase().trim();
+
+        const existingUser = await User1.findOne({
+          email: normalizedEmail,
+          _id: { $ne: counsellor._id },
+        });
+
+        if (existingUser) {
+          return res.status(400).json({
+            success: false,
+            message: "Email already exists",
+          });
+        }
+
+        counsellor.email = normalizedEmail;
+      }
+
+      if (name) counsellor.name = name.trim();
+      if (phone !== undefined) counsellor.phone = phone;
+
+      if (password) {
+        counsellor.password = await bcrypt.hash(password, 10);
+      }
+
+      await counsellor.save();
+
+      res.status(200).json({
+        success: true,
+        message: "Counsellor updated successfully",
+        data: {
+          _id: counsellor._id,
+          name: counsellor.name,
+          email: counsellor.email,
+          phone: counsellor.phone,
+          status: counsellor.status,
+        },
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+);
+
+
+// ========================================
+// 4. ACTIVATE / DEACTIVATE COUNSELLOR
+// ========================================
+
+app.put(
+  "/toggle-counsellor-status/:id",
+  verifyToken,
+  counsellorManagementAccess,
+  async (req, res) => {
+    try {
+      const counsellorRole = await Role.findOne({
+        roleName: { $regex: /^counsellor$/i },
+      });
+
+      if (!counsellorRole) {
+        return res.status(404).json({
+          success: false,
+          message: "Counsellor role not found",
+        });
+      }
+
+      const counsellor = await User1.findOne({
+        _id: req.params.id,
+        role: counsellorRole._id,
+      });
+
+      if (!counsellor) {
+        return res.status(404).json({
+          success: false,
+          message: "Counsellor not found",
+        });
+      }
+
+      counsellor.status =
+        counsellor.status === "active" ? "inactive" : "active";
+
+      await counsellor.save();
+
+      res.status(200).json({
+        success: true,
+        message: `Counsellor ${counsellor.status} successfully`,
+        data: {
+          _id: counsellor._id,
+          name: counsellor.name,
+          status: counsellor.status,
+        },
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+);
+
 
 
 app.get("/test-superadmin",
@@ -6638,6 +7364,32 @@ app.get("/student/my-counselling-requests", verifyToken, async (req, res) => {
 });
 
 
+
+
+const getLoggedInUser = async (userId) => {
+  return await User1.findById(userId).populate("role");
+};
+
+const getRoleName = (user) => {
+  return user?.role?.roleName
+    ?.toLowerCase()
+    .replace(/[\s_-]/g, "");
+};
+
+const isAdminRole = (role) =>
+  ["admin", "superadmin"].includes(role);
+
+const sendServerError = (res, error, message) => {
+  console.error(message, error);
+  return res.status(500).json({
+    success: false,
+    message,
+  });
+};
+
+
+
+
 app.post("/create-appointment", verifyToken, async (req, res) => {
   try {
     const {
@@ -6645,12 +7397,12 @@ app.post("/create-appointment", verifyToken, async (req, res) => {
       appointmentDate,
       appointmentTime,
       meetingMode,
-      meetingLink,
-      location,
-      purpose,
+      meetingLink = "",
+      location = "",
+      purpose = "",
+      notes = "",
     } = req.body;
 
-    // 1. Validate required fields
     if (
       !counsellingRequestId ||
       !appointmentDate ||
@@ -6659,33 +7411,39 @@ app.post("/create-appointment", verifyToken, async (req, res) => {
     ) {
       return res.status(400).json({
         success: false,
-        message: "Please provide all required fields",
+        message: "Please provide all required appointment details",
+      });
+    }
+
+    if (!mongoose.isValidObjectId(counsellingRequestId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid counselling request ID",
       });
     }
 
     if (!["online", "offline"].includes(meetingMode)) {
       return res.status(400).json({
         success: false,
-        message: "Invalid meeting mode",
+        message: "Meeting mode must be online or offline",
       });
     }
 
-    if (meetingMode === "online" && !meetingLink) {
+    if (meetingMode === "online" && !meetingLink.trim()) {
       return res.status(400).json({
         success: false,
-        message: "Meeting link is required for online appointments",
+        message: "Meeting link is required for online appointment",
       });
     }
 
-    if (meetingMode === "offline" && !location) {
+    if (meetingMode === "offline" && !location.trim()) {
       return res.status(400).json({
         success: false,
-        message: "Location is required for offline appointments",
+        message: "Location is required for offline appointment",
       });
     }
 
-    // 2. Get logged-in user
-    const user = await User1.findById(req.userId).populate("role");
+    const user = await getLoggedInUser(req.userId);
 
     if (!user) {
       return res.status(404).json({
@@ -6694,30 +7452,37 @@ app.post("/create-appointment", verifyToken, async (req, res) => {
       });
     }
 
-    const roleName = user.role?.roleName
-      ?.toLowerCase()
-      .replace(/[\s_-]/g, "");
+    const role = getRoleName(user);
 
-    if (!["admin", "superadmin", "counsellor"].includes(roleName)) {
+    if (!["student", "counsellor", "admin", "superadmin"].includes(role)) {
       return res.status(403).json({
         success: false,
-        message: "You are not authorized to create appointments",
+        message: "You are not allowed to create appointments",
       });
     }
 
-    // 3. Find counselling request
-    const counsellingRequest = await CounsellingRequest.findById(
+    const request = await CounsellingRequest.findById(
       counsellingRequestId
     );
 
-    if (!counsellingRequest) {
+    if (!request) {
       return res.status(404).json({
         success: false,
         message: "Counselling request not found",
       });
     }
 
-    // 4. Find active assignment
+    // Student sirf apni counselling request par booking karega
+    if (
+      role === "student" &&
+      String(request.student) !== String(req.userId)
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "You can book appointment only for your own request",
+      });
+    }
+
     const assignment = await CounsellingAssignment.findOne({
       counsellingRequest: counsellingRequestId,
       status: "active",
@@ -6730,83 +7495,159 @@ app.post("/create-appointment", verifyToken, async (req, res) => {
       });
     }
 
-    // 5. Counsellor can create appointment only for own assignment
+    // Counsellor sirf apni assigned request par booking karega
     if (
-      roleName === "counsellor" &&
-      assignment.counsellor.toString() !== req.userId
+      role === "counsellor" &&
+      String(assignment.counsellor) !== String(req.userId)
     ) {
       return res.status(403).json({
         success: false,
-        message: "You can only create appointments for your assigned students",
+        message: "This counselling request is not assigned to you",
       });
     }
 
-    // 6. Validate appointment date
     const parsedDate = new Date(appointmentDate);
 
-    if (isNaN(parsedDate.getTime())) {
+    if (Number.isNaN(parsedDate.getTime())) {
       return res.status(400).json({
         success: false,
         message: "Invalid appointment date",
       });
     }
 
-    // 7. Create appointment
+    if (parsedDate < new Date(new Date().setHours(0, 0, 0, 0))) {
+      return res.status(400).json({
+        success: false,
+        message: "Appointment date cannot be in the past",
+      });
+    }
+
+    const appointmentStatus =
+      role === "student" ? "pending" : "scheduled";
+
     const appointment = await Appointment.create({
       appointmentNumber: `APT-${Date.now()}`,
       counsellingRequest: counsellingRequestId,
-      student: counsellingRequest.student,
+      assignment: assignment._id,
+      student: request.student,
       counsellor: assignment.counsellor,
       appointmentDate: parsedDate,
       appointmentTime,
       meetingMode,
       meetingLink: meetingMode === "online" ? meetingLink : "",
       location: meetingMode === "offline" ? location : "",
-      purpose: purpose || "",
+      purpose,
+      notes,
+      status: appointmentStatus,
       createdBy: req.userId,
+      createdByRole: role,
     });
 
     return res.status(201).json({
       success: true,
-      message: "Appointment created successfully",
+      message:
+        appointmentStatus === "pending"
+          ? "Appointment request submitted. Waiting for counsellor approval."
+          : "Appointment created successfully",
       data: appointment,
     });
   } catch (error) {
-    console.error("Create Appointment Error:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Something went wrong",
-      error: error.message,
-    });
+    return sendServerError(res, error, "Failed to create appointment");
   }
 });
 
 
+
+
+app.put("/approve-appointment/:id", verifyToken, async (req, res) => {
+  try {
+    const user = await getLoggedInUser(req.userId);
+    const role = getRoleName(user);
+
+    if (!["counsellor", "admin", "superadmin"].includes(role)) {
+      return res.status(403).json({
+        success: false,
+        message: "Only counsellor or admin can approve appointments",
+      });
+    }
+
+    const appointment = await Appointment.findById(req.params.id);
+
+    if (!appointment) {
+      return res.status(404).json({
+        success: false,
+        message: "Appointment not found",
+      });
+    }
+
+    if (
+      role === "counsellor" &&
+      String(appointment.counsellor) !== String(req.userId)
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "This appointment is not assigned to you",
+      });
+    }
+
+    if (appointment.status !== "pending") {
+      return res.status(400).json({
+        success: false,
+        message: "Only pending appointments can be approved",
+      });
+    }
+
+    appointment.status = "scheduled";
+    appointment.approvedBy = req.userId;
+    appointment.approvedAt = new Date();
+
+    await appointment.save();
+
+    return res.json({
+      success: true,
+      message: "Appointment approved successfully",
+      data: appointment,
+    });
+  } catch (error) {
+    return sendServerError(res, error, "Failed to approve appointment");
+  }
+});
+
+
+
+
+
+
 app.get("/student/my-appointments", verifyToken, async (req, res) => {
   try {
+    const user = await getLoggedInUser(req.userId);
+
+    if (getRoleName(user) !== "student") {
+      return res.status(403).json({
+        success: false,
+        message: "Only students can access this route",
+      });
+    }
+
     const appointments = await Appointment.find({
       student: req.userId,
     })
       .populate("counsellingRequest", "requestNumber status")
       .populate("counsellor", "name email")
+      .populate("approvedBy", "name email")
       .sort({ appointmentDate: 1, appointmentTime: 1 });
 
-    return res.status(200).json({
+    return res.json({
       success: true,
       message: "Student appointments fetched successfully",
+      count: appointments.length,
       data: appointments,
     });
   } catch (error) {
-    console.error("Student Appointments Error:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Unable to fetch appointments",
-      error: error.message,
-    });
+    return sendServerError(res, error, "Failed to fetch appointments");
   }
 });
+
 
 
 app.put("/update-appointment-status/:id", verifyToken, async (req, res) => {
@@ -6895,120 +7736,64 @@ app.put("/update-appointment-status/:id", verifyToken, async (req, res) => {
 });
 
 
+
 app.get("/get-appointments", verifyToken, async (req, res) => {
   try {
-    const user = await User1.findById(req.userId).populate("role");
+    const user = await getLoggedInUser(req.userId);
+    const role = getRoleName(user);
 
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
-    }
-
-    const roleName = user.role?.roleName
-      ?.toLowerCase()
-      .replace(/[\s_-]/g, "");
-
-    if (!["admin", "superadmin", "counsellor"].includes(roleName)) {
+    if (!["admin", "superadmin", "counsellor"].includes(role)) {
       return res.status(403).json({
         success: false,
-        message: "You are not authorized to view appointments",
+        message: "You are not allowed to view all appointments",
       });
     }
-    // Counsellor only sees own appointments
-    const filter =
-      roleName === "counsellor"
-        ? { counsellor: req.userId }
-        : {};
+
+    const filter = {};
+
+    if (role === "counsellor") {
+      filter.counsellor = req.userId;
+    }
+
+    if (req.query.status) {
+      filter.status = req.query.status;
+    }
 
     const appointments = await Appointment.find(filter)
-      .populate("student", "name email")
+      .populate("student", "name email contact")
       .populate("counsellor", "name email")
       .populate("counsellingRequest", "requestNumber status")
       .populate("createdBy", "name email")
+      .populate("approvedBy", "name email")
       .sort({ appointmentDate: 1, createdAt: -1 });
 
-    return res.status(200).json({
+    return res.json({
       success: true,
       message: "Appointments fetched successfully",
+      count: appointments.length,
       data: appointments,
     });
   } catch (error) {
-    console.error("Get Appointments Error:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Unable to fetch appointments",
-      error: error.message,
-    });
+    return sendServerError(res, error, "Failed to fetch appointments");
   }
 });
 
 
-app.put("/reschedule-appointment/:id", verifyToken, async (req, res) => {
+
+app.put("/update-appointment-status/:id", verifyToken, async (req, res) => {
   try {
-    const {
-      appointmentDate,
-      appointmentTime,
-      meetingMode,
-      meetingLink,
-      location,
-      purpose,
-      notes,
-    } = req.body;
+    const { status, cancellationReason = "" } = req.body;
 
-    // 1. Logged-in user aur role check
-    const user = await User1.findById(req.userId).populate("role");
-
-    if (!user || !user.role) {
-      return res.status(401).json({
-        success: false,
-        message: "User not found",
-      });
-    }
-
-    const roleName = user.role.roleName
-      ?.toLowerCase()
-      .replace(/[\s_-]/g, "");
-
-    if (!["admin", "superadmin", "counsellor"].includes(roleName)) {
-      return res.status(403).json({
-        success: false,
-        message: "You are not authorized to reschedule appointments",
-      });
-    }
-
-    // 2. Required fields validation
-    if (!appointmentDate || !appointmentTime || !meetingMode) {
+    if (status !== "cancelled") {
       return res.status(400).json({
         success: false,
-        message: "Appointment date, time and meeting mode are required",
+        message: "Only cancellation is supported by this route",
       });
     }
 
-    if (!["online", "offline"].includes(meetingMode)) {
-      return res.status(400).json({
-        success: false,
-        message: "Meeting mode must be online or offline",
-      });
-    }
+    const user = await getLoggedInUser(req.userId);
+    const role = getRoleName(user);
 
-    if (meetingMode === "online" && !meetingLink?.trim()) {
-      return res.status(400).json({
-        success: false,
-        message: "Meeting link is required for online appointments",
-      });
-    }
-
-    if (meetingMode === "offline" && !location?.trim()) {
-      return res.status(400).json({
-        success: false,
-        message: "Location is required for offline appointments",
-      });
-    }
-
-    // 3. Appointment find karo
     const appointment = await Appointment.findById(req.params.id);
 
     if (!appointment) {
@@ -7018,166 +7803,90 @@ app.put("/reschedule-appointment/:id", verifyToken, async (req, res) => {
       });
     }
 
-    // 4. Counsellor sirf apni appointment reschedule kar sakta hai
+    const isStudentOwner =
+      role === "student" &&
+      String(appointment.student) === String(req.userId);
+
+    const isCounsellorOwner =
+      role === "counsellor" &&
+      String(appointment.counsellor) === String(req.userId);
+
     if (
-      roleName === "counsellor" &&
-      appointment.counsellor.toString() !== req.userId
+      !isStudentOwner &&
+      !isCounsellorOwner &&
+      !isAdminRole(role)
     ) {
       return res.status(403).json({
         success: false,
-        message: "You can only reschedule your own appointments",
+        message: "You are not allowed to cancel this appointment",
       });
     }
 
-    // 5. Completed ya cancelled appointment reschedule nahi hogi
-    if (!["scheduled", "rescheduled"].includes(appointment.status)) {
+    if (["completed", "cancelled"].includes(appointment.status)) {
       return res.status(400).json({
         success: false,
-        message: "Only scheduled appointments can be rescheduled",
+        message: "This appointment cannot be cancelled",
       });
     }
 
-    // 6. Date validation
-    const parsedDate = new Date(appointmentDate);
+    const activeSession = await CounsellingSession.findOne({
+      appointment: appointment._id,
+      status: "in_progress",
+    });
 
-    if (isNaN(parsedDate.getTime())) {
+    if (activeSession) {
       return res.status(400).json({
         success: false,
-        message: "Invalid appointment date",
+        message: "Appointment cannot be cancelled while a session is in progress",
       });
     }
 
-    // 7. Save old appointment details in history
-appointment.rescheduleHistory.push({
-  oldAppointmentDate: appointment.appointmentDate,
-  oldAppointmentTime: appointment.appointmentTime,
-  oldMeetingMode: appointment.meetingMode,
-  oldMeetingLink: appointment.meetingLink,
-  oldLocation: appointment.location,
-  rescheduledAt: new Date(),
-  rescheduledBy: req.userId,
-});
-
-    // 8. Appointment update
-    appointment.appointmentDate = parsedDate;
-    appointment.appointmentTime = appointmentTime;
-    appointment.meetingMode = meetingMode;
-
-    appointment.meetingLink =
-      meetingMode === "online" ? meetingLink.trim() : "";
-
-    appointment.location =
-      meetingMode === "offline" ? location.trim() : "";
-
-    if (purpose !== undefined) {
-      appointment.purpose = purpose;
-    }
-
-    if (notes !== undefined) {
-      appointment.notes = notes;
-    }
-
-    appointment.status = "rescheduled";
+    appointment.status = "cancelled";
+    appointment.cancelledBy = req.userId;
+    appointment.cancellationReason = cancellationReason;
 
     await appointment.save();
 
-    return res.status(200).json({
+    // Pending/scheduled sessions ko cancel karo; completed sessions preserve rahenge
+    await CounsellingSession.updateMany(
+      {
+        appointment: appointment._id,
+        status: "scheduled",
+      },
+      {
+        $set: { status: "cancelled" },
+      }
+    );
+
+    return res.json({
       success: true,
-      message: "Appointment rescheduled successfully",
+      message: "Appointment cancelled successfully",
       data: appointment,
     });
   } catch (error) {
-    console.error("Reschedule Appointment Error:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Something went wrong while rescheduling appointment",
-      error: error.message,
-    });
+    return sendServerError(res, error, "Failed to update appointment");
   }
 });
 
-app.get("/appointment-reschedule-history/:id",
-  verifyToken,
-  async (req, res) => {
-    try {
-      const user = await User1.findById(req.userId).populate("role");
 
-      if (!user) {
-        return res.status(404).json({
-          success: false,
-          message: "User not found",
-        });
-      }
 
-      const roleName = user.role?.roleName
-        ?.toLowerCase()
-        .replace(/[\s_-]/g, "");
 
-      if (!["admin", "superadmin", "counsellor", "student"].includes(roleName)) {
-        return res.status(403).json({
-          success: false,
-          message: "Access denied",
-        });
-      }
 
-      const appointment = await Appointment.findById(req.params.id)
-        .populate("rescheduleHistory.rescheduledBy", "name email");
 
-      if (!appointment) {
-        return res.status(404).json({
-          success: false,
-          message: "Appointment not found",
-        });
-      }
-
-      // Student can only see their own appointment
-      if (
-        roleName === "student" &&
-        appointment.student.toString() !== req.userId
-      ) {
-        return res.status(403).json({
-          success: false,
-          message: "You can only view your own appointment history",
-        });
-      }
-
-      // Counsellor can only see their assigned appointments
-      if (
-        roleName === "counsellor" &&
-        appointment.counsellor.toString() !== req.userId
-      ) {
-        return res.status(403).json({
-          success: false,
-          message: "You can only view your assigned appointments",
-        });
-      }
-
-      return res.status(200).json({
-        success: true,
-        message: "Appointment history fetched successfully",
-        data: appointment.rescheduleHistory || [],
-      });
-    } catch (error) {
-      console.error("Reschedule History Error:", error);
-
-      return res.status(500).json({
-        success: false,
-        message: "Server error",
-        error: error.message,
-      });
-    }
-  }
-);
 
 app.post("/create-counselling-session", verifyToken, async (req, res) => {
   try {
     const {
       appointmentId,
-      agenda,
+      sessionDate,
+      startTime = "",
+      endTime = "",
+      meetingMode,
+      meetingLink = "",
+      location = "",
+      agenda = "",
     } = req.body;
 
-    // 1. Validate appointment ID
     if (!appointmentId) {
       return res.status(400).json({
         success: false,
@@ -7185,28 +7894,23 @@ app.post("/create-counselling-session", verifyToken, async (req, res) => {
       });
     }
 
-    // 2. Check logged-in user
-    const user = await User1.findById(req.userId).populate("role");
-
-    if (!user) {
-      return res.status(404).json({
+    if (!mongoose.isValidObjectId(appointmentId)) {
+      return res.status(400).json({
         success: false,
-        message: "User not found",
+        message: "Invalid appointment ID",
       });
     }
 
-    const roleName = user.role?.roleName
-      ?.toLowerCase()
-      .replace(/[\s_-]/g, "");
+    const user = await getLoggedInUser(req.userId);
+    const role = getRoleName(user);
 
-    if (!["admin", "superadmin", "counsellor"].includes(roleName)) {
+    if (!["admin", "superadmin", "counsellor"].includes(role)) {
       return res.status(403).json({
         success: false,
-        message: "You are not authorized to create counselling sessions",
+        message: "Only counsellor or admin can create sessions",
       });
     }
 
-    // 3. Find appointment
     const appointment = await Appointment.findById(appointmentId);
 
     if (!appointment) {
@@ -7216,54 +7920,81 @@ app.post("/create-counselling-session", verifyToken, async (req, res) => {
       });
     }
 
-    // 4. Check appointment status
-    if (!["scheduled", "rescheduled"].includes(appointment.status)) {
-      return res.status(400).json({
-        success: false,
-        message: "Only scheduled or rescheduled appointments can have a session",
-      });
-    }
-
-    // 5. Counsellor can create only own appointment session
     if (
-      roleName === "counsellor" &&
-      appointment.counsellor.toString() !== req.userId
+      role === "counsellor" &&
+      String(appointment.counsellor) !== String(req.userId)
     ) {
       return res.status(403).json({
         success: false,
-        message: "You can only create sessions for your assigned appointments",
+        message: "This appointment is not assigned to you",
       });
     }
 
-    // 6. Check existing session
-    const existingSession = await CounsellingSession.findOne({
-      appointment: appointmentId,
-    });
-
-    if (existingSession) {
+    if (!["scheduled", "rescheduled", "in_progress"].includes(appointment.status)) {
       return res.status(400).json({
         success: false,
-        message: "Counselling session already exists for this appointment",
+        message: "Approve the appointment before creating a session",
       });
     }
 
-    // 7. Create session
-    const session = new CounsellingSession({
+    const finalSessionDate = sessionDate
+      ? new Date(sessionDate)
+      : appointment.appointmentDate;
+
+    if (Number.isNaN(finalSessionDate.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid session date",
+      });
+    }
+
+    const finalMeetingMode = meetingMode || appointment.meetingMode;
+    const finalMeetingLink =
+      finalMeetingMode === "online"
+        ? meetingLink || appointment.meetingLink
+        : "";
+    const finalLocation =
+      finalMeetingMode === "offline"
+        ? location || appointment.location
+        : "";
+
+    if (!["online", "offline"].includes(finalMeetingMode)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid meeting mode",
+      });
+    }
+
+    if (finalMeetingMode === "online" && !finalMeetingLink.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Meeting link is required for online session",
+      });
+    }
+
+    if (finalMeetingMode === "offline" && !finalLocation.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Location is required for offline session",
+      });
+    }
+
+    const session = await CounsellingSession.create({
       sessionNumber: `CS-${Date.now()}`,
       appointment: appointment._id,
       counsellingRequest: appointment.counsellingRequest,
       student: appointment.student,
       counsellor: appointment.counsellor,
-      sessionDate: appointment.appointmentDate,
-      meetingMode: appointment.meetingMode,
-      meetingLink: appointment.meetingLink,
-      location: appointment.location,
-      agenda: agenda || appointment.purpose || "",
+      sessionDate: finalSessionDate,
+      startTime,
+      endTime,
+      meetingMode: finalMeetingMode,
+      meetingLink: finalMeetingLink,
+      location: finalLocation,
+      agenda: agenda || appointment.purpose,
       status: "scheduled",
       createdBy: req.userId,
     });
-
-    await session.save();
 
     return res.status(201).json({
       success: true,
@@ -7271,421 +8002,527 @@ app.post("/create-counselling-session", verifyToken, async (req, res) => {
       data: session,
     });
   } catch (error) {
-    console.error("Create Counselling Session Error:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error",
-      error: error.message,
-    });
+    return sendServerError(res, error, "Failed to create counselling session");
   }
 });
 
-app.put("/start-counselling-session/:id", verifyToken, async (req, res) => {
-  try {
-    // 1. Check user
-    const user = await User1.findById(req.userId).populate("role");
 
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
-    }
 
-    const roleName = user.role?.roleName
-      ?.toLowerCase()
-      .replace(/[\s_-]/g, "");
-
-    // 2. Role validation
-    if (!["admin", "superadmin", "counsellor"].includes(roleName)) {
-      return res.status(403).json({
-        success: false,
-        message: "You are not authorized to start this session",
-      });
-    }
-
-    // 3. Find session
-    const session = await CounsellingSession.findById(req.params.id);
-
-    if (!session) {
-      return res.status(404).json({
-        success: false,
-        message: "Counselling session not found",
-      });
-    }
-
-    // 4. Counsellor permission
-    if (
-      roleName === "counsellor" &&
-      session.counsellor.toString() !== req.userId
-    ) {
-      return res.status(403).json({
-        success: false,
-        message: "You can only start your assigned sessions",
-      });
-    }
-
-    // 5. Check session status
-    if (session.status !== "scheduled") {
-      return res.status(400).json({
-        success: false,
-        message: "Only scheduled sessions can be started",
-      });
-    }
-
-    // 6. Start session
-    session.status = "in_progress";
-    session.startedAt = new Date();
-    session.startTime = new Date().toLocaleTimeString("en-IN", {
-      timeZone: "Asia/Kolkata",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-
-    await session.save();
-
-    return res.status(200).json({
-      success: true,
-      message: "Counselling session started successfully",
-      data: session,
-    });
-
-  } catch (error) {
-    console.error("Start Counselling Session Error:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error",
-      error: error.message,
-    });
-  }
-});
 
 app.put("/complete-counselling-session/:id", verifyToken, async (req, res) => {
   try {
     const {
-      discussion,
-      outcome,
-      nextSteps,
+      discussion = "",
+      outcome = "",
+      nextSteps = "",
+      recommendations = [],
+      nextFollowUpDate = null,
+      endTime = "",
     } = req.body;
 
-    // 1. Check logged-in user
-    const user = await User1.findById(req.userId).populate("role");
+    const user = await getLoggedInUser(req.userId);
+    const role = getRoleName(user);
 
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
-    }
-
-    const roleName = user.role?.roleName
-      ?.toLowerCase()
-      .replace(/[\s_-]/g, "");
-
-    // 2. Role validation
-    if (!["admin", "superadmin", "counsellor"].includes(roleName)) {
+    if (!["admin", "superadmin", "counsellor"].includes(role)) {
       return res.status(403).json({
         success: false,
-        message: "You are not authorized to complete this session",
+        message: "You are not allowed to complete this session",
       });
     }
 
-    // 3. Find session
     const session = await CounsellingSession.findById(req.params.id);
 
     if (!session) {
       return res.status(404).json({
         success: false,
-        message: "Counselling session not found",
+        message: "Session not found",
       });
     }
 
-    // 4. Counsellor permission
     if (
-      roleName === "counsellor" &&
-      session.counsellor.toString() !== req.userId
+      role === "counsellor" &&
+      String(session.counsellor) !== String(req.userId)
     ) {
       return res.status(403).json({
         success: false,
-        message: "You can only complete your assigned sessions",
+        message: "This session is not assigned to you",
       });
     }
 
-    // 5. Check session status
-    if (session.status !== "in_progress") {
+    if (session.status !== "in_progress" || !session.startedAt) {
       return res.status(400).json({
         success: false,
         message: "Only in-progress sessions can be completed",
       });
     }
 
-    // 6. Validate start time
-    if (!session.startedAt) {
+    const completedAt = new Date();
+
+    session.discussion = discussion;
+    session.outcome = outcome;
+    session.nextSteps = nextSteps;
+    session.recommendations = Array.isArray(recommendations)
+      ? recommendations
+      : [];
+    session.nextFollowUpDate = nextFollowUpDate
+      ? new Date(nextFollowUpDate)
+      : null;
+
+    if (
+      session.nextFollowUpDate &&
+      Number.isNaN(session.nextFollowUpDate.getTime())
+    ) {
       return res.status(400).json({
         success: false,
-        message: "Session start time not found",
+        message: "Invalid next follow-up date",
       });
     }
 
-    // 7. Calculate duration
-    const completedAt = new Date();
-
-    const durationMinutes = Math.max(
+    session.status = "completed";
+    session.completedAt = completedAt;
+    session.durationMinutes = Math.max(
       0,
       Math.round(
-        (completedAt.getTime() - new Date(session.startedAt).getTime()) / 60000
+        (completedAt.getTime() - session.startedAt.getTime()) / 60000
       )
     );
 
-    // 8. Update session details
-    session.discussion = discussion || "";
-    session.outcome = outcome || "";
-    session.nextSteps = nextSteps || "";
-
-    session.status = "completed";
-    session.completedAt = completedAt;
-    session.durationMinutes = durationMinutes;
-
-    session.endTime = completedAt.toLocaleTimeString("en-IN", {
-      timeZone: "Asia/Kolkata",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    session.endTime =
+      endTime ||
+      completedAt.toLocaleTimeString("en-IN", {
+        timeZone: "Asia/Kolkata",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      });
 
     await session.save();
 
-    // 9. Update appointment status
-    await Appointment.findByIdAndUpdate(session.appointment, {
-      status: "completed",
-    });
+    // Appointment ko yahan completed nahi karna hai.
+    // Future follow-up sessions isi appointment ke andar ban sakte hain.
 
-    return res.status(200).json({
+    return res.json({
       success: true,
       message: "Counselling session completed successfully",
       data: session,
     });
-
   } catch (error) {
-    console.error("Complete Counselling Session Error:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error",
-      error: error.message,
-    });
+    return sendServerError(res, error, "Failed to complete counselling session");
   }
 });
+
+
+
+
+
+app.put("/complete-counselling-session/:id", verifyToken, async (req, res) => {
+  try {
+    const {
+      discussion = "",
+      outcome = "",
+      nextSteps = "",
+      recommendations = [],
+      nextFollowUpDate = null,
+      endTime = "",
+    } = req.body;
+
+    const user = await getLoggedInUser(req.userId);
+    const role = getRoleName(user);
+
+    if (!["admin", "superadmin", "counsellor"].includes(role)) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not allowed to complete this session",
+      });
+    }
+
+    const session = await CounsellingSession.findById(req.params.id);
+
+    if (!session) {
+      return res.status(404).json({
+        success: false,
+        message: "Session not found",
+      });
+    }
+
+    if (
+      role === "counsellor" &&
+      String(session.counsellor) !== String(req.userId)
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "This session is not assigned to you",
+      });
+    }
+
+    if (session.status !== "in_progress" || !session.startedAt) {
+      return res.status(400).json({
+        success: false,
+        message: "Only in-progress sessions can be completed",
+      });
+    }
+
+    const completedAt = new Date();
+
+    session.discussion = discussion;
+    session.outcome = outcome;
+    session.nextSteps = nextSteps;
+    session.recommendations = Array.isArray(recommendations)
+      ? recommendations
+      : [];
+    session.nextFollowUpDate = nextFollowUpDate
+      ? new Date(nextFollowUpDate)
+      : null;
+
+    if (
+      session.nextFollowUpDate &&
+      Number.isNaN(session.nextFollowUpDate.getTime())
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid next follow-up date",
+      });
+    }
+
+    session.status = "completed";
+    session.completedAt = completedAt;
+    session.durationMinutes = Math.max(
+      0,
+      Math.round(
+        (completedAt.getTime() - session.startedAt.getTime()) / 60000
+      )
+    );
+
+    session.endTime =
+      endTime ||
+      completedAt.toLocaleTimeString("en-IN", {
+        timeZone: "Asia/Kolkata",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      });
+
+    await session.save();
+
+    // Appointment ko yahan completed nahi karna hai.
+    // Future follow-up sessions isi appointment ke andar ban sakte hain.
+
+    return res.json({
+      success: true,
+      message: "Counselling session completed successfully",
+      data: session,
+    });
+  } catch (error) {
+    return sendServerError(res, error, "Failed to complete counselling session");
+  }
+});
+
 
 
 app.get("/get-counselling-sessions", verifyToken, async (req, res) => {
   try {
-    // 1. Check logged-in user
-    const user = await User1.findById(req.userId).populate("role");
+    const user = await getLoggedInUser(req.userId);
+    const role = getRoleName(user);
 
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
-    }
+    const filter = {};
 
-    const roleName = user.role?.roleName
-      ?.toLowerCase()
-      .replace(/[\s_-]/g, "");
-
-    // 2. Role-based filter
-    let filter = {};
-
-    if (roleName === "admin" || roleName === "superadmin") {
-      filter = {};
-    } else if (roleName === "counsellor") {
-      filter = {
-        counsellor: req.userId,
-      };
-    } else if (roleName === "student") {
-      filter = {
-        student: req.userId,
-      };
-    } else {
+    if (role === "student") {
+      filter.student = req.userId;
+    } else if (role === "counsellor") {
+      filter.counsellor = req.userId;
+    } else if (!isAdminRole(role)) {
       return res.status(403).json({
         success: false,
-        message: "You are not authorized to access counselling sessions",
+        message: "You are not allowed to view sessions",
       });
     }
 
-    // 3. Fetch counselling sessions
+    if (req.query.appointmentId) {
+      if (!mongoose.isValidObjectId(req.query.appointmentId)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid appointment ID",
+        });
+      }
+      filter.appointment = req.query.appointmentId;
+    }
+
+    if (req.query.status) {
+      filter.status = req.query.status;
+    }
+
     const sessions = await CounsellingSession.find(filter)
       .populate("appointment", "appointmentNumber appointmentDate appointmentTime status")
       .populate("counsellingRequest", "requestNumber status")
-      .populate("student", "name email")
+      .populate("student", "name email contact")
       .populate("counsellor", "name email")
       .populate("createdBy", "name email")
-      .sort({ createdAt: -1 });
+      .sort({ sessionDate: 1, startTime: 1, createdAt: -1 });
 
-    // 4. Response
-    return res.status(200).json({
+    return res.json({
       success: true,
       message: "Counselling sessions fetched successfully",
-      total: sessions.length,
+      count: sessions.length,
       data: sessions,
     });
-
   } catch (error) {
-    console.error("Get Counselling Sessions Error:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error",
-      error: error.message,
-    });
+    return sendServerError(res, error, "Failed to fetch counselling sessions");
   }
 });
 
 
-app.post("/student/session-feedback/:sessionId",
-  verifyToken,
-  async (req, res) => {
-    try {
-      const { rating, feedback, suggestions } = req.body;
-      const { sessionId } = req.params;
+app.put("/reschedule-counselling-session/:id", verifyToken, async (req, res) => {
+  try {
+    const { sessionDate, startTime = "", reason = "" } = req.body;
 
-      if (!mongoose.isValidObjectId(sessionId)) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid session ID",
-        });
-      }
-
-      const user = await User1.findById(req.userId).populate("role");
-
-      const roleName = user?.role?.roleName
-        ?.toLowerCase()
-        .replace(/[\s_-]/g, "");
-
-      if (roleName !== "student") {
-        return res.status(403).json({
-          success: false,
-          message: "Only students can submit feedback",
-        });
-      }
-
-      if (!Number.isInteger(Number(rating)) ||
-          Number(rating) < 1 ||
-          Number(rating) > 5) {
-        return res.status(400).json({
-          success: false,
-          message: "Rating must be between 1 and 5",
-        });
-      }
-
-      const session = await CounsellingSession.findById(sessionId);
-
-      if (!session) {
-        return res.status(404).json({
-          success: false,
-          message: "Counselling session not found",
-        });
-      }
-
-      if (String(session.student) !== String(req.userId)) {
-        return res.status(403).json({
-          success: false,
-          message: "You cannot submit feedback for this session",
-        });
-      }
-
-      if (session.status !== "completed") {
-        return res.status(400).json({
-          success: false,
-          message: "Feedback can only be submitted after session completion",
-        });
-      }
-
-      const existingFeedback = await SessionFeedback.findOne({
-        session: sessionId,
-      });
-
-      if (existingFeedback) {
-        return res.status(400).json({
-          success: false,
-          message: "Feedback already submitted for this session",
-        });
-      }
-
-      const newFeedback = await SessionFeedback.create({
-        session: sessionId,
-        student: req.userId,
-        counsellor: session.counsellor,
-        rating: Number(rating),
-        feedback: feedback || "",
-        suggestions: suggestions || "",
-      });
-
-      return res.status(201).json({
-        success: true,
-        message: "Session feedback submitted successfully",
-        data: newFeedback,
-      });
-    } catch (error) {
-      if (error.code === 11000) {
-        return res.status(400).json({
-          success: false,
-          message: "Feedback already submitted for this session",
-        });
-      }
-
-      console.error("Session feedback error:", error);
-
-      return res.status(500).json({
+    if (!sessionDate) {
+      return res.status(400).json({
         success: false,
-        message: "Internal server error",
+        message: "New session date is required",
       });
     }
-  }
-);
 
-app.get("/student/my-session-feedbacks",
-  verifyToken,
-  async (req, res) => {
-    try {
-      const user = await User1.findById(req.userId).populate("role");
+    const parsedDate = new Date(sessionDate);
 
-      const roleName = user?.role?.roleName
-        ?.toLowerCase()
-        .replace(/[\s_-]/g, "");
-
-      if (roleName !== "student") {
-        return res.status(403).json({
-          success: false,
-          message: "Only students can access this data",
-        });
-      }
-
-      const feedbacks = await SessionFeedback.find({
-        student: req.userId,
-      })
-        .populate("session")
-        .populate("counsellor", "name email")
-        .sort({ createdAt: -1 });
-
-      return res.status(200).json({
-        success: true,
-        message: "Session feedbacks fetched successfully",
-        total: feedbacks.length,
-        data: feedbacks,
-      });
-    } catch (error) {
-      console.error("Fetch feedback error:", error);
-
-      return res.status(500).json({
+    if (Number.isNaN(parsedDate.getTime())) {
+      return res.status(400).json({
         success: false,
-        message: "Internal server error",
+        message: "Invalid session date",
       });
     }
+
+    const user = await getLoggedInUser(req.userId);
+    const role = getRoleName(user);
+
+    if (!["admin", "superadmin", "counsellor"].includes(role)) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not allowed to reschedule sessions",
+      });
+    }
+
+    const session = await CounsellingSession.findById(req.params.id);
+
+    if (!session) {
+      return res.status(404).json({
+        success: false,
+        message: "Session not found",
+      });
+    }
+
+    if (
+      role === "counsellor" &&
+      String(session.counsellor) !== String(req.userId)
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "This session is not assigned to you",
+      });
+    }
+
+    if (session.status !== "scheduled") {
+      return res.status(400).json({
+        success: false,
+        message: "Only scheduled sessions can be rescheduled",
+      });
+    }
+
+    session.rescheduleHistory.push({
+      oldSessionDate: session.sessionDate,
+      oldStartTime: session.startTime,
+      rescheduledBy: req.userId,
+      reason,
+    });
+
+    session.sessionDate = parsedDate;
+    session.startTime = startTime;
+
+    await session.save();
+
+    return res.json({
+      success: true,
+      message: "Session rescheduled successfully",
+      data: session,
+    });
+  } catch (error) {
+    return sendServerError(res, error, "Failed to reschedule session");
   }
-);
+});
+
+
+
+
+app.post("/student/session-feedback/:sessionId", verifyToken, async (req, res) => {
+  try {
+    const { rating, feedback, comment = "" } = req.body;
+
+    const user = await getLoggedInUser(req.userId);
+
+    if (getRoleName(user) !== "student") {
+      return res.status(403).json({
+        success: false,
+        message: "Only students can submit session feedback",
+      });
+    }
+
+    if (!rating || rating < 1 || rating > 5) {
+      return res.status(400).json({
+        success: false,
+        message: "Rating must be between 1 and 5",
+      });
+    }
+
+    const session = await CounsellingSession.findById(req.params.sessionId);
+
+    if (!session) {
+      return res.status(404).json({
+        success: false,
+        message: "Session not found",
+      });
+    }
+
+    if (String(session.student) !== String(req.userId)) {
+      return res.status(403).json({
+        success: false,
+        message: "You can submit feedback only for your own session",
+      });
+    }
+
+    if (session.status !== "completed") {
+      return res.status(400).json({
+        success: false,
+        message: "Feedback can only be submitted for completed sessions",
+      });
+    }
+
+    const existingFeedback = await SessionFeedback.findOne({
+      session: session._id,
+    });
+
+    if (existingFeedback) {
+      return res.status(400).json({
+        success: false,
+        message: "Feedback already submitted for this session",
+      });
+    }
+
+    const newFeedback = await SessionFeedback.create({
+      session: session._id,
+      student: req.userId,
+      counsellor: session.counsellor,
+      rating,
+      feedback: feedback || comment,
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "Session feedback submitted successfully",
+      data: newFeedback,
+    });
+  } catch (error) {
+    return sendServerError(res, error, "Failed to submit session feedback");
+  }
+});
+
+
+
+app.get("/student/my-session-feedbacks", verifyToken, async (req, res) => {
+  try {
+    const user = await getLoggedInUser(req.userId);
+
+    if (getRoleName(user) !== "student") {
+      return res.status(403).json({
+        success: false,
+        message: "Only students can access this route",
+      });
+    }
+
+    const feedbacks = await SessionFeedback.find({
+      student: req.userId,
+    })
+      .populate("session", "sessionNumber sessionDate status outcome")
+      .populate("counsellor", "name email")
+      .sort({ createdAt: -1 });
+
+    return res.json({
+      success: true,
+      message: "Student session feedbacks fetched successfully",
+      count: feedbacks.length,
+      data: feedbacks,
+    });
+  } catch (error) {
+    return sendServerError(res, error, "Failed to fetch session feedbacks");
+  }
+});
+
+
+
+app.put("/complete-appointment/:id", verifyToken, async (req, res) => {
+  try {
+    const user = await getLoggedInUser(req.userId);
+    const role = getRoleName(user);
+
+    if (!["admin", "superadmin", "counsellor"].includes(role)) {
+      return res.status(403).json({
+        success: false,
+        message: "Only counsellor or admin can complete an appointment",
+      });
+    }
+
+    const appointment = await Appointment.findById(req.params.id);
+
+    if (!appointment) {
+      return res.status(404).json({
+        success: false,
+        message: "Appointment not found",
+      });
+    }
+
+    if (
+      role === "counsellor" &&
+      String(appointment.counsellor) !== String(req.userId)
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "This appointment is not assigned to you",
+      });
+    }
+
+    const sessions = await CounsellingSession.find({
+      appointment: appointment._id,
+    });
+
+    if (sessions.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Create at least one session before completing appointment",
+      });
+    }
+
+    const unfinishedSession = sessions.some((session) =>
+      ["scheduled", "in_progress"].includes(session.status)
+    );
+
+    if (unfinishedSession) {
+      return res.status(400).json({
+        success: false,
+        message: "Complete or cancel all remaining sessions first",
+      });
+    }
+
+    appointment.status = "completed";
+    await appointment.save();
+
+    return res.json({
+      success: true,
+      message: "Appointment completed successfully",
+      data: appointment,
+    });
+  } catch (error) {
+    return sendServerError(res, error, "Failed to complete appointment");
+  }
+});
+
 
 
 

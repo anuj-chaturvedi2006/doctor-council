@@ -45,15 +45,11 @@ const createEmptyForm = () => ({
   status: "pending",
 });
 
-const getAuthConfig = () => {
-  const token = localStorage.getItem("token");
-
-  return {
-    headers: token
-      ? { Authorization: `Bearer ${token}` }
-      : {},
-  };
-};
+const getAuthConfig = () => ({
+  headers: {
+    Authorization: `Bearer ${localStorage.getItem("token")}`,
+  },
+});
 
 const makeSlug = (value) =>
   value
@@ -65,6 +61,64 @@ const makeSlug = (value) =>
 
 const getErrorMessage = (error, fallback) =>
   error.response?.data?.message || error.message || fallback;
+
+const getImageUrl = (imagePath) => {
+  if (!imagePath) return "";
+
+  if (
+    imagePath.startsWith("blob:") ||
+    imagePath.startsWith("http://") ||
+    imagePath.startsWith("https://")
+  ) {
+    return imagePath;
+  }
+
+  return `${API}${imagePath.startsWith("/") ? "" : "/"}${imagePath}`;
+};
+
+const validateImageFile = (file, label) => {
+  const allowedTypes = [
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+  ];
+
+  if (!allowedTypes.includes(file.type)) {
+    return `${label}: Only JPG, PNG and WEBP images are allowed.`;
+  }
+
+  if (file.size > 5 * 1024 * 1024) {
+    return `${label}: Image size should not exceed 5 MB.`;
+  }
+
+  return "";
+};
+
+const buildCollegeFormData = (data, logo, backgroundImage) => {
+  const formData = new FormData();
+
+  formData.append("_id", data._id || "");
+  formData.append("name", data.name || "");
+  formData.append("slug", data.slug || "");
+  formData.append("description", data.description || "");
+  formData.append("collegeType", data.collegeType || "");
+  formData.append("ownership", data.ownership || "");
+  formData.append("establishedYear", data.establishedYear || "");
+  formData.append("location", JSON.stringify(data.location || {}));
+  formData.append("website", data.website || "");
+  formData.append("contact", JSON.stringify(data.contact || {}));
+  formData.append("status", data.status || "pending");
+
+  if (logo) {
+    formData.append("logo", logo);
+  }
+
+  if (backgroundImage) {
+    formData.append("backgroundImage", backgroundImage);
+  }
+
+  return formData;
+};
 
 const inputClass =
   "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50";
@@ -178,7 +232,14 @@ const FormField = ({
   </div>
 );
 
-const CollegeFormFields = ({ data, handler, nestedHandler, contactHandler: contactChange }) => (
+const CollegeFormFields = ({   data,
+  handler,
+  nestedHandler,
+  contactHandler: contactChange,
+  onLogoChange,
+  onBackgroundChange,
+  logoPreview,
+  backgroundPreview, }) => (
   <div className="grid grid-cols-1 gap-5 p-5 sm:p-6 md:grid-cols-2">
     <FormField
       label="College Name"
@@ -238,13 +299,65 @@ const CollegeFormFields = ({ data, handler, nestedHandler, contactHandler: conta
     />
 
     <div className="md:col-span-2">
-      <FormField
-        label="Logo URL"
-        name="logo"
-        value={data.logo}
-        onChange={handler}
-        placeholder="https://example.com/logo.png"
+     {/* COLLEGE LOGO */}
+<div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+
+  {/* COLLEGE LOGO */}
+  <div>
+    <label className={labelClass}>
+      College Logo
+    </label>
+
+    <input
+      type="file"
+      accept="image/jpeg,image/png,image/webp"
+      onChange={onLogoChange}
+      className={inputClass}
+    />
+
+    <p className="mt-1 text-xs text-slate-400">
+      JPG, PNG, WEBP. Maximum 5 MB.
+    </p>
+
+    {logoPreview && (
+      <img
+        src={getImageUrl(logoPreview)}
+        alt="College Logo"
+        className="mt-3 h-24 w-24 rounded-xl border object-contain p-2"
       />
+    )}
+  </div>
+
+  {/* BACKGROUND IMAGE */}
+  <div>
+    <label className={labelClass}>
+      College Background Image
+    </label>
+
+    <input
+      type="file"
+      accept="image/jpeg,image/png,image/webp"
+      onChange={onBackgroundChange}
+      className={inputClass}
+    />
+
+    <p className="mt-1 text-xs text-slate-400">
+      JPG, PNG, WEBP. Maximum 5 MB.
+    </p>
+
+    {backgroundPreview && (
+      <img
+        src={getImageUrl(backgroundPreview)}
+        alt="College Background"
+        className="mt-3 h-32 w-full rounded-xl border object-cover"
+      />
+    )}
+  </div>
+
+</div>
+
+{/* BACKGROUND IMAGE */}
+
     </div>
 
     <div className="md:col-span-2">
@@ -411,6 +524,18 @@ const College = () => {
     text: "",
   });
 
+  const [logoFile, setLogoFile] = useState(null);
+const [backgroundImageFile, setBackgroundImageFile] = useState(null);
+
+const [logoPreview, setLogoPreview] = useState("");
+const [backgroundPreview, setBackgroundPreview] = useState("");
+
+const [editLogoFile, setEditLogoFile] = useState(null);
+const [editBackgroundFile, setEditBackgroundFile] = useState(null);
+
+const [editLogoPreview, setEditLogoPreview] = useState("");
+const [editBackgroundPreview, setEditBackgroundPreview] = useState("");
+
   const showMessage = (type, text) => {
     setMessage({ type, text });
   };
@@ -452,6 +577,73 @@ const College = () => {
   useEffect(() => {
     getColleges();
   }, []);
+
+
+
+const handleLogoChange = (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  const error = validateImageFile(file, "Logo");
+
+  if (error) {
+    showMessage("error", error);
+    e.target.value = "";
+    return;
+  }
+
+  setLogoFile(file);
+  setLogoPreview(URL.createObjectURL(file));
+};
+
+const handleBackgroundChange = (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  const error = validateImageFile(file, "Background Image");
+
+  if (error) {
+    showMessage("error", error);
+    e.target.value = "";
+    return;
+  }
+
+  setBackgroundImageFile(file);
+  setBackgroundPreview(URL.createObjectURL(file));
+};
+
+
+const handleEditLogoChange = (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  const error = validateImageFile(file, "Logo");
+
+  if (error) {
+    showMessage("error", error);
+    e.target.value = "";
+    return;
+  }
+
+  setEditLogoFile(file);
+  setEditLogoPreview(URL.createObjectURL(file));
+};
+
+const handleEditBackgroundChange = (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  const error = validateImageFile(file, "Background Image");
+
+  if (error) {
+    showMessage("error", error);
+    e.target.value = "";
+    return;
+  }
+
+  setEditBackgroundFile(file);
+  setEditBackgroundPreview(URL.createObjectURL(file));
+};
 
   // ================= FORM HANDLERS =================
 
@@ -540,6 +732,11 @@ const College = () => {
   };
 
   const openEditModal = (college) => {
+    setEditLogoFile(null);
+setEditBackgroundFile(null);
+
+setEditLogoPreview(college.logo || "");
+setEditBackgroundPreview(college.collegeImage || "");
     setMessage({ type: "", text: "" });
 
     setEditCollege({
@@ -591,35 +788,28 @@ const addCollegeSubmit = async () => {
   setSaving(true);
 
   try {
-    const collegeName = form.name.trim();
-
-    const payload = {
-      ...form,
-      name: collegeName,
-      slug: form.slug?.trim() || makeSlug(collegeName),
-      establishedYear: form.establishedYear
-        ? Number(form.establishedYear)
-        : undefined,
-      location: {
-        ...form.location,
-      },
-      contact: {
-        email: form.contact?.email?.trim() || "",
-        phone: form.contact?.phone?.trim() || "",
-      },
-    };
+    const formData = buildCollegeFormData(
+      form,
+      logoFile,
+      backgroundImageFile
+    );
 
     const res = await axios.post(
       `${API}/add-college`,
-      payload,
+      formData,
       getAuthConfig()
     );
 
     if (res.data.status === true || res.data.success === true) {
-      showMessage("success", "College successfully added.");
-
       setAddCollege(false);
       setForm(createEmptyForm());
+
+      setLogoFile(null);
+      setBackgroundImageFile(null);
+      setLogoPreview("");
+      setBackgroundPreview("");
+
+      showMessage("success", "College successfully added.");
 
       await getColleges();
     } else {
@@ -628,11 +818,9 @@ const addCollegeSubmit = async () => {
         res.data.message || "College add nahi hua."
       );
     }
+
   } catch (error) {
-    console.error(
-      "Add college error:",
-      error.response?.data || error
-    );
+    console.error("Add college error:", error.response?.data || error);
 
     showMessage(
       "error",
@@ -657,45 +845,24 @@ const saveEdit = async () => {
   setSaving(true);
 
   try {
-    const collegeName = editCollege.name.trim();
-
-    const payload = {
-      _id: editCollege._id,
-      name: collegeName,
-      slug: editCollege.slug?.trim() || makeSlug(collegeName),
-      logo: editCollege.logo || "",
-      description: editCollege.description || "",
-      collegeType: editCollege.collegeType,
-      ownership: editCollege.ownership || "",
-      establishedYear: editCollege.establishedYear
-        ? Number(editCollege.establishedYear)
-        : undefined,
-      location: {
-        ...createEmptyForm().location,
-        ...(editCollege.location || {}),
-      },
-      website: editCollege.website || "",
-      contact: {
-        email: editCollege.contact?.email?.trim() || "",
-        phone: editCollege.contact?.phone?.trim() || "",
-      },
-      status: editCollege.status || "pending",
-    };
+    const formData = buildCollegeFormData(
+      editCollege,
+      editLogoFile,
+      editBackgroundFile
+    );
 
     const res = await axios.post(
       `${API}/edit-college`,
-      payload,
+      formData,
       getAuthConfig()
     );
 
     if (res.data.status === true || res.data.success === true) {
-      const updatedCollege = res.data.college;
-
-      if (updatedCollege) {
+      if (res.data.college) {
         setColleges((prev) =>
           prev.map((college) =>
-            college._id === updatedCollege._id
-              ? { ...college, ...updatedCollege }
+            college._id === res.data.college._id
+              ? { ...college, ...res.data.college }
               : college
           )
         );
@@ -705,6 +872,11 @@ const saveEdit = async () => {
 
       setEditCollege(null);
 
+      setEditLogoFile(null);
+      setEditBackgroundFile(null);
+      setEditLogoPreview("");
+      setEditBackgroundPreview("");
+
       showMessage("success", "College successfully updated.");
     } else {
       showMessage(
@@ -712,11 +884,9 @@ const saveEdit = async () => {
         res.data.message || "College update nahi hua."
       );
     }
+
   } catch (error) {
-    console.error(
-      "Update college error:",
-      error.response?.data || error
-    );
+    console.error("Edit college error:", error.response?.data || error);
 
     showMessage(
       "error",
@@ -726,7 +896,6 @@ const saveEdit = async () => {
     setSaving(false);
   }
 };
-
 
   // ================= DELETE COLLEGE =================
 const deleteCollege = async (id) => {
@@ -993,7 +1162,7 @@ const deleteCollege = async (id) => {
                       <div className="flex items-center gap-3">
                         {college.logo ? (
                           <img
-                            src={college.logo}
+                           src={getImageUrl(college.logo)}
                             alt={`${college.name} logo`}
                             className="h-11 w-11 shrink-0 rounded-xl border border-slate-100 bg-white object-contain p-1"
                           />
@@ -1129,12 +1298,16 @@ const deleteCollege = async (id) => {
           wide
         >
           <div className="overflow-y-auto">
-            <CollegeFormFields
-              data={form}
-              handler={changeHandler}
-              nestedHandler={locationHandler}
-              contactHandler={contactHandler}
-            />
+           <CollegeFormFields
+  data={form}
+  handler={changeHandler}
+  nestedHandler={locationHandler}
+  contactHandler={contactHandler}
+  onLogoChange={handleLogoChange}
+  onBackgroundChange={handleBackgroundChange}
+  logoPreview={logoPreview}
+  backgroundPreview={backgroundPreview}
+/>
           </div>
 
           <div className="flex shrink-0 justify-end gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:px-6">
@@ -1169,11 +1342,15 @@ const deleteCollege = async (id) => {
         >
           <div className="overflow-y-auto">
             <CollegeFormFields
-              data={editCollege}
-              handler={editHandler}
-              nestedHandler={editLocationHandler}
-              contactHandler={editContactHandler}
-            />
+  data={editCollege}
+  handler={editHandler}
+  nestedHandler={editLocationHandler}
+  contactHandler={editContactHandler}
+  onLogoChange={handleEditLogoChange}
+  onBackgroundChange={handleEditBackgroundChange}
+  logoPreview={editLogoPreview}
+  backgroundPreview={editBackgroundPreview}
+/>
           </div>
 
           <div className="flex shrink-0 justify-end gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:px-6">
@@ -1206,10 +1383,41 @@ const deleteCollege = async (id) => {
           saving={saving}
         >
           <div className="overflow-y-auto p-5 sm:p-6">
+
+{/* College Background Image */}
+<div className="relative mb-6 h-48 w-full overflow-hidden rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 sm:h-56">
+  {selectedCollege.collegeImage ? (
+    <img
+      src={getImageUrl(selectedCollege.collegeImage)}
+      alt={`${selectedCollege.name} background`}
+      className="h-full w-full object-cover"
+    />
+  ) : (
+    <div className="flex h-full w-full items-center justify-center">
+      <p className="text-lg font-semibold text-white">
+        {selectedCollege.name}
+      </p>
+    </div>
+  )}
+
+  {/* Dark Overlay */}
+  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
+
+  {/* College Name on Background */}
+  <div className="absolute bottom-4 left-5 right-5">
+    <h3 className="text-xl font-bold text-white drop-shadow-md">
+      {selectedCollege.name}
+    </h3>
+    <p className="mt-1 text-sm text-white/90">
+      {selectedCollege.collegeType || "College"}
+    </p>
+  </div>
+</div>
+
             <div className="mb-6 flex items-center gap-4">
               {selectedCollege.logo ? (
                 <img
-                  src={selectedCollege.logo}
+                  src={getImageUrl(selectedCollege.logo)}
                   alt={`${selectedCollege.name} logo`}
                   className="h-16 w-16 rounded-2xl border border-slate-200 object-contain p-2"
                 />
