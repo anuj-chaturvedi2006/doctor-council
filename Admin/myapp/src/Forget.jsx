@@ -33,7 +33,7 @@ const Forget = () => {
       setLoading(true);
 
       const res = await axios.post(
-        "http://localhost:2002/forget-pass",
+        "https://doctor-council.onrender.com/forget-pass",
         { email }
       );
 
@@ -63,7 +63,7 @@ const Forget = () => {
       setLoading(true);
 
       const res = await axios.post(
-        "http://localhost:2002/verifyemail-forget",
+        "https://doctor-council.onrender.com/verifyemail-forget",
         { email, otp }
       );
 
@@ -100,7 +100,7 @@ const Forget = () => {
       setLoading(true);
 
       const res = await axios.post(
-        "http://localhost:2002/forget-password",
+        "https://doctor-council.onrender.com/forget-password",
         {
           email,
           password: newpassword,

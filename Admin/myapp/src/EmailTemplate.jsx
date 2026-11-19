@@ -30,7 +30,7 @@ import {
 import "ckeditor5/ckeditor5.css";
 import DOMPurify from "dompurify";
 
-const API_URL = "http://localhost:2002";
+const API_URL = "https://doctor-council.onrender.com";
 
 const getAuthConfig = () => {
   const token = localStorage.getItem("token");

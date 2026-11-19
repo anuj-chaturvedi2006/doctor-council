@@ -37,7 +37,7 @@ const Reset = () => {
 
 
       const res = await axios.post(
-        "http://localhost:2002/reset-password",
+        "https://doctor-council.onrender.com/reset-password",
         form
       );
 

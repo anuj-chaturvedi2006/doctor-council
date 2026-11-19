@@ -31,7 +31,7 @@ const Login = () => {
       setLoading(true);
 
       const res = await axios.post(
-        "http://localhost:2002/admin-login",
+        "https://doctor-council.onrender.com/admin-login",
         form
       );
 

@@ -20,7 +20,7 @@ import {
   FiBookOpen,
 } from "react-icons/fi";
 
-const API = "http://localhost:2002";
+const API = "https://doctor-council.onrender.com";
 
 const createEmptyForm = () => ({
   name: "",
@@ -909,7 +909,7 @@ const deleteCollege = async (id) => {
     const token = localStorage.getItem("token");
 
     const res = await axios.post(
-      "http://localhost:2002/delete-college",
+      "https://doctor-council.onrender.com/delete-college",
       { id },
       {
         headers: {

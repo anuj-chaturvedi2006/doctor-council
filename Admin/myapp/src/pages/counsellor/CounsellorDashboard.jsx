@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 
-const API = "http://localhost:2002";
+const API = "https://doctor-council.onrender.com";
 
 const CounsellorDashboard = () => {
   const navigate = useNavigate();

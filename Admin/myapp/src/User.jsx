@@ -18,7 +18,7 @@ const User = () => {
   const fetchRoles = async () => {
     try {
       const res = await axios.get(
-        "http://localhost:2002/get-roles-dropdown"
+        "https://doctor-council.onrender.com/get-roles-dropdown"
       );
 
       if (res.data.success) {
@@ -52,7 +52,7 @@ const User = () => {
       setLoading(true);
 
       const res = await axios.post(
-        "http://localhost:2002/create-user",
+        "https://doctor-council.onrender.com/create-user",
         form
       );
 

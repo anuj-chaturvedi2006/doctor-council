@@ -17,7 +17,7 @@ import {
   FiBookOpen,
 } from "react-icons/fi";
 
-const API = "http://localhost:2002";
+const API = "https://doctor-council.onrender.com";
 
 /* ---------- Helpers ---------- */
 const getImageUrl = (imagePath) => {

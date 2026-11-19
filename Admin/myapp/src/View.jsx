@@ -7,7 +7,7 @@ const View = () => {
     console.log("student data=>",studentd);
     
     const viewstudent=async()=>{
-        const res=await axios.get(`http://localhost:2002/get-user/:${id}`)
+        const res=await axios.get(`https://doctor-council.onrender.com/get-user/:${id}`)
     }
   return (
     <div>

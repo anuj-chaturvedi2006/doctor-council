@@ -16,7 +16,7 @@ import {
   FiAlertCircle,
 } from "react-icons/fi";
 
-const API = "http://localhost:2002";
+const API = "https://doctor-council.onrender.com";
 
 // JWT authentication
 const getAuthConfig = () => {

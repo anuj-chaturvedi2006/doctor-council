@@ -13,7 +13,7 @@ import {
   FiRefreshCw,
 } from "react-icons/fi";
 
-const API_URL = "http://localhost:2002";
+const API_URL = "https://doctor-council.onrender.com";
 
 const StudentDetails = () => {
   const { assignmentId } = useParams();

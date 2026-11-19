@@ -9,7 +9,7 @@ import {
   FiX,
 } from "react-icons/fi";
 
-const API_URL = "http://localhost:2002";
+const API_URL = "https://doctor-council.onrender.com";
 
 const FollowUp = () => {
   const [followUps, setFollowUps] = useState([]);

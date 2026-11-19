@@ -42,7 +42,7 @@ import { ToastContainer, toast } from "react-toastify";
 
 import "react-toastify/dist/ReactToastify.css";
 
-const API = "http://localhost:2002";
+const API = "https://doctor-council.onrender.com";
 
 const emptyForm = {
 

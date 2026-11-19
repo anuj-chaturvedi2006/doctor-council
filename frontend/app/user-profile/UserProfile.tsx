@@ -153,7 +153,7 @@ const authConfig = () => ({
   },
 });
 
-const API_FALLBACK = "http://localhost:2002";
+const API_FALLBACK = "https://doctor-council.onrender.com";
 
 const emptyCounsellingForm: CounsellingForm = {
   academicYear: "",

@@ -14,7 +14,7 @@ const [deleteLoading, setDeleteLoading] = useState(false);
       setLoading(true);
 
       const res = await axios.get(
-        "http://localhost:2002/get-contact"
+        "https://doctor-council.onrender.com/get-contact"
       );
 
       setData(res?.data?.data || []);
@@ -34,7 +34,7 @@ const deleteContact = async () => {
     const id = deleteContactData._id;
 
     const res = await axios.delete(
-      `http://localhost:2002/delete-contact/${id}`
+      `https://doctor-council.onrender.com/delete-contact/${id}`
     );
 
     if (res.data.status) {

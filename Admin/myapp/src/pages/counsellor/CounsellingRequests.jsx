@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { FiRefreshCw, FiEye, FiSearch, FiX } from "react-icons/fi";
 
-const API_URL = "http://localhost:2002";
+const API_URL = "https://doctor-council.onrender.com";
 
 const CounsellingRequests = () => {
   const [requests, setRequests] = useState([]);
@@ -171,7 +171,7 @@ const CounsellingRequests = () => {
       const token = localStorage.getItem("token");
 
       const response = await fetch(
-        "http://localhost:2002/get-counselling-assignments",
+        "https://doctor-council.onrender.com/get-counselling-assignments",
         {
           headers: {
             Authorization: `Bearer ${token}`,

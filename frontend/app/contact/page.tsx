@@ -51,7 +51,7 @@ export default function InquiryForm() {
       setLoading(true);
 
       const res = await axios.post(
-        "http://localhost:2002/contact",
+        "https://doctor-council.onrender.com/contact",
         formData
       );
 

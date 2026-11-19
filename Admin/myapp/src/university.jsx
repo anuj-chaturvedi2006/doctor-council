@@ -25,7 +25,7 @@ import {
   FiExternalLink,
 } from "react-icons/fi";
 
-const API = "http://localhost:2002";
+const API = "https://doctor-council.onrender.com";
 
 // ================= EMPTY FORM =================
 

@@ -49,7 +49,7 @@ interface OrderData {
 // ================= CONFIG =================
 
 const API_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:2002";
+  process.env.NEXT_PUBLIC_API_URL || "https://doctor-council.onrender.com";
 
 const getErrorMessage = (
   err: unknown,
