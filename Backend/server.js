@@ -2623,8 +2623,7 @@ app.get("/get-college/:id", async (req, res) => {
 //edit college route
 
 
-app.post(
-  "/edit-college",
+app.post("/edit-college",
   verifyToken,
   requirePermission("colleges", "update"),
   collegeUpload.fields([
