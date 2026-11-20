@@ -2575,12 +2575,13 @@ app.get("/get-colleges", async (req, res) => {
       colleges,
     });
   } catch (error) {
-    console.error("Get colleges error:", error);
+     console.error("GET COLLEGES ERROR:", error);
 
-    return res.status(500).json({
-      status: false,
-      message: "Failed to fetch colleges",
-    });
+  return res.status(500).json({
+    status: false,
+    message: "Failed to fetch colleges",
+    error: error.message,
+  });
   }
 });
 app.get("/get-college/:id", async (req, res) => {
