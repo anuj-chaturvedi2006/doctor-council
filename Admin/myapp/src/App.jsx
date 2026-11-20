@@ -34,9 +34,9 @@ const App = () => {
   return (
     <Routes>
       {/* Normal Pages */}
-      <Route path="/" element={<Home />} />
+      {/* <Route path="/" element={<Home />} /> */}
       <Route path="/user" element={<User />} />
-      <Route path="/login" element={<Login />} />
+      <Route path="/" element={<Login />} />
       <Route path="/forget" element={<Forget />} />
       <Route path="/reset" element={<Reset />} />
 
