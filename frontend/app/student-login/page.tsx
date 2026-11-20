@@ -56,7 +56,7 @@ export default function StudentLoginPage() {
     try {
       setLoading(true);
 
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+      const apiUrl = "https://doctor-council.onrender.com";
 
       if (!apiUrl) {
         throw new Error("API URL is not configured.");
