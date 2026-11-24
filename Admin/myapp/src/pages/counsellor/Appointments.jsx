@@ -28,6 +28,23 @@ const Appointments = () => {
  const [rescheduleHistory, setRescheduleHistory] = useState([]);
 const [historyLoading, setHistoryLoading] = useState(false);
 const [historyError, setHistoryError] = useState("");
+
+  // New Appointment modal state
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [availableStudents, setAvailableStudents] = useState([]);
+  const [studentsLoading, setStudentsLoading] = useState(false);
+  const [creatingAppointment, setCreatingAppointment] = useState(false);
+  const [createError, setCreateError] = useState("");
+  const [appointmentForm, setAppointmentForm] = useState({
+    counsellingRequestId: "",
+    appointmentDate: "",
+    appointmentTime: "",
+    meetingMode: "online",
+    meetingLink: "",
+    location: "",
+    purpose: "",
+    notes: "",
+  });
   // Fetch Appointments
   const fetchAppointments = useCallback(async () => {
     const token = localStorage.getItem("token");
@@ -73,6 +90,122 @@ const [historyError, setHistoryError] = useState("");
   useEffect(() => {
     fetchAppointments();
   }, [fetchAppointments]);
+
+  // Fetch active assigned students for the New Appointment dropdown
+  const fetchAvailableStudents = async () => {
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      setCreateError("Please login again.");
+      return;
+    }
+
+    try {
+      setStudentsLoading(true);
+      setCreateError("");
+
+      const response = await axios.get(
+        `${API_URL}/get-available-appointment-students`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (response.data.success) {
+        setAvailableStudents(response.data.data || []);
+      } else {
+        setCreateError(response.data.message || "Unable to load assigned students.");
+      }
+    } catch (err) {
+      console.error("Available Appointment Students Error:", err);
+      setCreateError(
+        err.response?.data?.message || "Unable to load assigned students."
+      );
+    } finally {
+      setStudentsLoading(false);
+    }
+  };
+
+  const openCreateAppointment = () => {
+    setAppointmentForm({
+      counsellingRequestId: "",
+      appointmentDate: "",
+      appointmentTime: "",
+      meetingMode: "online",
+      meetingLink: "",
+      location: "",
+      purpose: "",
+      notes: "",
+    });
+    setCreateError("");
+    setShowCreateModal(true);
+    fetchAvailableStudents();
+  };
+
+  const handleAppointmentFormChange = (e) => {
+    const { name, value } = e.target;
+    setAppointmentForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleCreateAppointment = async (e) => {
+    e.preventDefault();
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      setCreateError("Please login again.");
+      return;
+    }
+
+    if (!appointmentForm.counsellingRequestId) {
+      setCreateError("Please select a student and counselling request.");
+      return;
+    }
+
+    if (appointmentForm.meetingMode === "online" && !appointmentForm.meetingLink.trim()) {
+      setCreateError("Please enter the online meeting link.");
+      return;
+    }
+
+    if (appointmentForm.meetingMode === "offline" && !appointmentForm.location.trim()) {
+      setCreateError("Please enter the meeting location.");
+      return;
+    }
+
+    const payload = {
+      counsellingRequestId: appointmentForm.counsellingRequestId,
+      appointmentDate: appointmentForm.appointmentDate,
+      appointmentTime: appointmentForm.appointmentTime,
+      meetingMode: appointmentForm.meetingMode,
+      meetingLink: appointmentForm.meetingMode === "online" ? appointmentForm.meetingLink.trim() : "",
+      location: appointmentForm.meetingMode === "offline" ? appointmentForm.location.trim() : "",
+      purpose: appointmentForm.purpose.trim(),
+      notes: appointmentForm.notes.trim(),
+    };
+
+    try {
+      setCreatingAppointment(true);
+      setCreateError("");
+
+      const response = await axios.post(
+        `${API_URL}/create-appointment`,
+        payload,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (response.data.success) {
+        alert(response.data.message || "Appointment created successfully.");
+        setShowCreateModal(false);
+        await fetchAppointments();
+      } else {
+        setCreateError(response.data.message || "Unable to create appointment.");
+      }
+    } catch (err) {
+      console.error("Create Appointment Error:", err);
+      setCreateError(
+        err.response?.data?.message || "Unable to create appointment."
+      );
+    } finally {
+      setCreatingAppointment(false);
+    }
+  };
 
   // Update Appointment Status
   const updateAppointmentStatus = async (id, status) => {
@@ -217,14 +350,22 @@ const openAppointmentDetails = (appointment) => {
           </p>
         </div>
 
-        <button
-          onClick={fetchAppointments}
-          disabled={loading}
-          className="flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 disabled:opacity-50"
-        >
-          <FiRefreshCw className={loading ? "animate-spin" : ""} />
-          Refresh
-        </button>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <button
+            onClick={openCreateAppointment}
+            className="flex items-center justify-center gap-2 bg-emerald-600 text-white px-4 py-2.5 rounded-lg hover:bg-emerald-700"
+          >
+            + New Appointment
+          </button>
+          <button
+            onClick={fetchAppointments}
+            disabled={loading}
+            className="flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          >
+            <FiRefreshCw className={loading ? "animate-spin" : ""} />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* Statistics */}
@@ -279,6 +420,7 @@ const openAppointmentDetails = (appointment) => {
             className="border rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="all">All Status</option>
+            <option value="pending">Pending</option>
             <option value="scheduled">Scheduled</option>
             <option value="completed">Completed</option>
             <option value="cancelled">Cancelled</option>
@@ -418,6 +560,187 @@ const openAppointmentDetails = (appointment) => {
           </div>
         )}
       </div>
+
+      {/* Create Appointment Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-3xl rounded-2xl shadow-xl max-h-[92vh] overflow-y-auto">
+            <div className="flex justify-between items-center p-5 border-b sticky top-0 bg-white z-10">
+              <div>
+                <h2 className="text-xl font-bold text-slate-800">Create New Appointment</h2>
+                <p className="text-sm text-slate-500 mt-1">Select an assigned student and enter appointment details.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCreateModal(false)}
+                className="p-2 hover:bg-slate-100 rounded-lg"
+              >
+                <FiX size={22} />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateAppointment} className="p-5 space-y-5">
+              {createError && (
+                <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-lg text-sm">
+                  {createError}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Student / Counselling Request <span className="text-red-500">*</span>
+                </label>
+                <select
+                  name="counsellingRequestId"
+                  value={appointmentForm.counsellingRequestId}
+                  onChange={handleAppointmentFormChange}
+                  required
+                  disabled={studentsLoading}
+                  className="w-full border rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100"
+                >
+                  <option value="">
+                    {studentsLoading ? "Loading assigned students..." : "Select student / request"}
+                  </option>
+                  {availableStudents.map((item) => (
+                    <option key={item.assignmentId} value={item.counsellingRequestId}>
+                      {item.student?.name || "Student"} — {item.requestNumber} — {item.admissionLevel} — {item.counsellor?.name || "Counsellor"}
+                    </option>
+                  ))}
+                </select>
+                {!studentsLoading && availableStudents.length === 0 && !createError && (
+                  <p className="text-xs text-amber-600 mt-2">No active assigned counselling requests found.</p>
+                )}
+                <p className="text-xs text-slate-500 mt-2">Admin/Superadmin can view all active assignments; counsellors can view their own assignments.</p>
+              </div>
+
+              {appointmentForm.counsellingRequestId && (() => {
+                const selectedRequest = availableStudents.find(
+                  (item) => item.counsellingRequestId === appointmentForm.counsellingRequestId
+                );
+                if (!selectedRequest) return null;
+                return (
+                  <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                    <div><p className="text-slate-500">Student</p><p className="font-semibold text-slate-800">{selectedRequest.student?.name || "N/A"}</p></div>
+                    <div><p className="text-slate-500">Email</p><p className="font-semibold text-slate-800 break-all">{selectedRequest.student?.email || "N/A"}</p></div>
+                    <div><p className="text-slate-500">Request Number</p><p className="font-semibold text-slate-800">{selectedRequest.requestNumber}</p></div>
+                    <div><p className="text-slate-500">Assigned Counsellor</p><p className="font-semibold text-slate-800">{selectedRequest.counsellor?.name || "N/A"}</p></div>
+                    <div><p className="text-slate-500">Admission Level</p><p className="font-semibold text-slate-800">{selectedRequest.admissionLevel || "N/A"}</p></div>
+                    <div><p className="text-slate-500">Academic Year</p><p className="font-semibold text-slate-800">{selectedRequest.academicYear || "N/A"}</p></div>
+                  </div>
+                );
+              })()}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Appointment Date *</label>
+                  <input
+                    type="date"
+                    name="appointmentDate"
+                    value={appointmentForm.appointmentDate}
+                    onChange={handleAppointmentFormChange}
+                    min={new Date().toLocaleDateString("en-CA")}
+                    required
+                    className="w-full border rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Appointment Time *</label>
+                  <input
+                    type="time"
+                    name="appointmentTime"
+                    value={appointmentForm.appointmentTime}
+                    onChange={handleAppointmentFormChange}
+                    required
+                    className="w-full border rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Meeting Mode *</label>
+                <select
+                  name="meetingMode"
+                  value={appointmentForm.meetingMode}
+                  onChange={handleAppointmentFormChange}
+                  className="w-full border rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="online">Online</option>
+                  <option value="offline">Offline</option>
+                </select>
+              </div>
+
+              {appointmentForm.meetingMode === "online" ? (
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Meeting Link *</label>
+                  <input
+                    type="url"
+                    name="meetingLink"
+                    value={appointmentForm.meetingLink}
+                    onChange={handleAppointmentFormChange}
+                    placeholder="https://meet.google.com/..."
+                    required
+                    className="w-full border rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Meeting Location *</label>
+                  <input
+                    type="text"
+                    name="location"
+                    value={appointmentForm.location}
+                    onChange={handleAppointmentFormChange}
+                    placeholder="Enter meeting address"
+                    required
+                    className="w-full border rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Purpose</label>
+                <input
+                  type="text"
+                  name="purpose"
+                  value={appointmentForm.purpose}
+                  onChange={handleAppointmentFormChange}
+                  placeholder="e.g. Career and college counselling"
+                  className="w-full border rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Notes</label>
+                <textarea
+                  name="notes"
+                  value={appointmentForm.notes}
+                  onChange={handleAppointmentFormChange}
+                  rows={3}
+                  placeholder="Additional instructions (optional)"
+                  className="w-full border rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 border-t pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateModal(false)}
+                  className="px-5 py-3 border rounded-lg text-slate-700 hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={creatingAppointment || studentsLoading || availableStudents.length === 0}
+                  className="px-5 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {creatingAppointment ? "Creating..." : "Create Appointment"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* View Appointment Modal */}
       {selectedAppointment && (

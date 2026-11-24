@@ -6476,8 +6476,7 @@ app.put(
 // 4. ACTIVATE / DEACTIVATE COUNSELLOR
 // ========================================
 
-app.put(
-  "/toggle-counsellor-status/:id",
+app.put("/toggle-counsellor-status/:id",
   verifyToken,
   counsellorManagementAccess,
   async (req, res) => {
@@ -7391,6 +7390,7 @@ const sendServerError = (res, error, message) => {
 
 
 
+
 app.post("/create-appointment", verifyToken, async (req, res) => {
   try {
     const {
@@ -7404,6 +7404,7 @@ app.post("/create-appointment", verifyToken, async (req, res) => {
       notes = "",
     } = req.body;
 
+    // 1. Required validation
     if (
       !counsellingRequestId ||
       !appointmentDate ||
@@ -7430,20 +7431,27 @@ app.post("/create-appointment", verifyToken, async (req, res) => {
       });
     }
 
-    if (meetingMode === "online" && !meetingLink.trim()) {
+    if (
+      meetingMode === "online" &&
+      (typeof meetingLink !== "string" || !meetingLink.trim())
+    ) {
       return res.status(400).json({
         success: false,
         message: "Meeting link is required for online appointment",
       });
     }
 
-    if (meetingMode === "offline" && !location.trim()) {
+    if (
+      meetingMode === "offline" &&
+      (typeof location !== "string" || !location.trim())
+    ) {
       return res.status(400).json({
         success: false,
         message: "Location is required for offline appointment",
       });
     }
 
+    // 2. Logged-in user
     const user = await getLoggedInUser(req.userId);
 
     if (!user) {
@@ -7462,6 +7470,7 @@ app.post("/create-appointment", verifyToken, async (req, res) => {
       });
     }
 
+    // 3. Find counselling request
     const request = await CounsellingRequest.findById(
       counsellingRequestId
     );
@@ -7473,7 +7482,7 @@ app.post("/create-appointment", verifyToken, async (req, res) => {
       });
     }
 
-    // Student sirf apni counselling request par booking karega
+    // 4. Student can create only own appointment
     if (
       role === "student" &&
       String(request.student) !== String(req.userId)
@@ -7484,6 +7493,7 @@ app.post("/create-appointment", verifyToken, async (req, res) => {
       });
     }
 
+    // 5. Find active assignment
     const assignment = await CounsellingAssignment.findOne({
       counsellingRequest: counsellingRequestId,
       status: "active",
@@ -7496,7 +7506,7 @@ app.post("/create-appointment", verifyToken, async (req, res) => {
       });
     }
 
-    // Counsellor sirf apni assigned request par booking karega
+    // 6. Counsellor can create only own assigned appointments
     if (
       role === "counsellor" &&
       String(assignment.counsellor) !== String(req.userId)
@@ -7507,6 +7517,25 @@ app.post("/create-appointment", verifyToken, async (req, res) => {
       });
     }
 
+    // 7. Prevent duplicate active appointments
+    const existingAppointment = await Appointment.findOne({
+      counsellingRequest: counsellingRequestId,
+      status: {
+        $in: ["pending", "scheduled", "rescheduled", "in_progress"],
+      },
+    });
+
+    if (existingAppointment) {
+      return res.status(409).json({
+        success: false,
+        message: "An active appointment already exists for this counselling request",
+        appointmentId: existingAppointment._id,
+        appointmentNumber: existingAppointment.appointmentNumber,
+        appointmentStatus: existingAppointment.status,
+      });
+    }
+
+    // 8. Validate appointment date
     const parsedDate = new Date(appointmentDate);
 
     if (Number.isNaN(parsedDate.getTime())) {
@@ -7516,16 +7545,21 @@ app.post("/create-appointment", verifyToken, async (req, res) => {
       });
     }
 
-    if (parsedDate < new Date(new Date().setHours(0, 0, 0, 0))) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (parsedDate < today) {
       return res.status(400).json({
         success: false,
         message: "Appointment date cannot be in the past",
       });
     }
 
+    // 9. Appointment status based on role
     const appointmentStatus =
       role === "student" ? "pending" : "scheduled";
 
+    // 10. Create appointment
     const appointment = await Appointment.create({
       appointmentNumber: `APT-${Date.now()}`,
       counsellingRequest: counsellingRequestId,
@@ -7533,12 +7567,14 @@ app.post("/create-appointment", verifyToken, async (req, res) => {
       student: request.student,
       counsellor: assignment.counsellor,
       appointmentDate: parsedDate,
-      appointmentTime,
+      appointmentTime: appointmentTime.trim(),
       meetingMode,
-      meetingLink: meetingMode === "online" ? meetingLink : "",
-      location: meetingMode === "offline" ? location : "",
-      purpose,
-      notes,
+      meetingLink:
+        meetingMode === "online" ? meetingLink.trim() : "",
+      location:
+        meetingMode === "offline" ? location.trim() : "",
+      purpose: typeof purpose === "string" ? purpose.trim() : "",
+      notes: typeof notes === "string" ? notes.trim() : "",
       status: appointmentStatus,
       createdBy: req.userId,
       createdByRole: role,
@@ -7556,6 +7592,7 @@ app.post("/create-appointment", verifyToken, async (req, res) => {
     return sendServerError(res, error, "Failed to create appointment");
   }
 });
+
 
 
 
@@ -7651,12 +7688,21 @@ app.get("/student/my-appointments", verifyToken, async (req, res) => {
 
 
 
+
 app.put("/update-appointment-status/:id", verifyToken, async (req, res) => {
   try {
-    const { status } = req.body;
+    const { status, cancellationReason = "" } = req.body;
     const { id } = req.params;
 
-    // 1. Validate status
+    // 1. Validate appointment ID
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid appointment ID",
+      });
+    }
+
+    // 2. Validate status
     if (!["completed", "cancelled"].includes(status)) {
       return res.status(400).json({
         success: false,
@@ -7664,8 +7710,8 @@ app.put("/update-appointment-status/:id", verifyToken, async (req, res) => {
       });
     }
 
-    // 2. Find logged-in user
-    const user = await User1.findById(req.userId).populate("role");
+    // 3. Get logged-in user
+    const user = await getLoggedInUser(req.userId);
 
     if (!user) {
       return res.status(404).json({
@@ -7674,12 +7720,9 @@ app.put("/update-appointment-status/:id", verifyToken, async (req, res) => {
       });
     }
 
-    const roleName = user.role?.roleName
-      ?.toLowerCase()
-      .replace(/[\s_-]/g, "");
+    const role = getRoleName(user);
 
-    // 3. Check permissions
-    if (!["admin", "superadmin", "counsellor"].includes(roleName)) {
+    if (!["student", "counsellor", "admin", "superadmin"].includes(role)) {
       return res.status(403).json({
         success: false,
         message: "You are not authorized to update appointments",
@@ -7696,45 +7739,136 @@ app.put("/update-appointment-status/:id", verifyToken, async (req, res) => {
       });
     }
 
-    // 5. Counsellor can update only own appointments
-    if (
-      roleName === "counsellor" &&
-      appointment.counsellor.toString() !== req.userId
-    ) {
+    // 5. Ownership check
+    const isStudentOwner =
+      role === "student" &&
+      String(appointment.student) === String(req.userId);
+
+    const isCounsellorOwner =
+      role === "counsellor" &&
+      String(appointment.counsellor) === String(req.userId);
+
+    const isAdmin = ["admin", "superadmin"].includes(role);
+
+    if (!isStudentOwner && !isCounsellorOwner && !isAdmin) {
       return res.status(403).json({
         success: false,
-        message: "You can only update your own appointments",
+        message: "You are not allowed to update this appointment",
       });
     }
 
-    // 6. Only scheduled appointments can be updated
-    if (appointment.status !== "scheduled") {
+    // 6. Only pending or scheduled appointments can be updated
+    if (!["pending", "scheduled"].includes(appointment.status)) {
       return res.status(400).json({
         success: false,
-        message: `Appointment is already ${appointment.status}`,
+        message: `Appointment cannot be updated because its status is ${appointment.status}`,
       });
     }
 
-    // 7. Update status
-    appointment.status = status;
-
-    await appointment.save();
-
-    return res.status(200).json({
-      success: true,
-      message: `Appointment marked as ${status} successfully`,
-      data: appointment,
+    // 7. Fetch all sessions
+    const sessions = await CounsellingSession.find({
+      appointment: appointment._id,
     });
+
+    // =========================================
+    // CANCEL APPOINTMENT
+    // =========================================
+
+    if (status === "cancelled") {
+      // Prevent cancellation if any session is running
+      const activeSession = sessions.find(
+        (session) => session.status === "in_progress"
+      );
+
+      if (activeSession) {
+        return res.status(400).json({
+          success: false,
+          message: "Appointment cannot be cancelled while a session is in progress",
+        });
+      }
+
+      // Cancel appointment
+      appointment.status = "cancelled";
+      appointment.cancelledBy = req.userId;
+      appointment.cancellationReason = cancellationReason.trim();
+
+      await appointment.save();
+
+      // Cancel all scheduled sessions
+      const sessionUpdate = await CounsellingSession.updateMany(
+        {
+          appointment: appointment._id,
+          status: "scheduled",
+        },
+        {
+          $set: {
+            status: "cancelled",
+          },
+        }
+      );
+
+      return res.status(200).json({
+        success: true,
+        message: "Appointment and scheduled sessions cancelled successfully",
+        data: {
+          appointment,
+          cancelledSessions: sessionUpdate.modifiedCount,
+        },
+      });
+    }
+
+    // =========================================
+    // COMPLETE APPOINTMENT
+    // =========================================
+
+    if (status === "completed") {
+      // Appointment must have at least one session
+      if (sessions.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Appointment cannot be completed without at least one counselling session",
+        });
+      }
+
+      // Check incomplete sessions
+      const incompleteSessions = sessions.filter(
+        (session) =>
+          !["completed", "cancelled"].includes(session.status)
+      );
+
+      if (incompleteSessions.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: "All counselling sessions must be completed or cancelled before completing the appointment",
+          incompleteSessions: incompleteSessions.map((session) => ({
+            _id: session._id,
+            sessionNumber: session.sessionNumber,
+            status: session.status,
+          })),
+        });
+      }
+
+      appointment.status = "completed";
+
+      await appointment.save();
+
+      return res.status(200).json({
+        success: true,
+        message: "Appointment completed successfully",
+        data: appointment,
+      });
+    }
   } catch (error) {
     console.error("Update Appointment Status Error:", error);
 
-    return res.status(500).json({
-      success: false,
-      message: "Unable to update appointment status",
-      error: error.message,
-    });
+    return sendServerError(
+      res,
+      error,
+      "Failed to update appointment status"
+    );
   }
 });
+
 
 
 
@@ -7779,96 +7913,81 @@ app.get("/get-appointments", verifyToken, async (req, res) => {
   }
 });
 
-
-
-app.put("/update-appointment-status/:id", verifyToken, async (req, res) => {
+app.get("/get-available-appointment-students", verifyToken, async (req, res) => {
   try {
-    const { status, cancellationReason = "" } = req.body;
-
-    if (status !== "cancelled") {
-      return res.status(400).json({
-        success: false,
-        message: "Only cancellation is supported by this route",
-      });
-    }
-
     const user = await getLoggedInUser(req.userId);
-    const role = getRoleName(user);
+    const roleName = getRoleName(user);
 
-    const appointment = await Appointment.findById(req.params.id);
-
-    if (!appointment) {
-      return res.status(404).json({
-        success: false,
-        message: "Appointment not found",
-      });
-    }
-
-    const isStudentOwner =
-      role === "student" &&
-      String(appointment.student) === String(req.userId);
-
-    const isCounsellorOwner =
-      role === "counsellor" &&
-      String(appointment.counsellor) === String(req.userId);
-
-    if (
-      !isStudentOwner &&
-      !isCounsellorOwner &&
-      !isAdminRole(role)
-    ) {
+    if (!["superadmin", "admin", "counsellor"].includes(roleName)) {
       return res.status(403).json({
         success: false,
-        message: "You are not allowed to cancel this appointment",
+        message: "You are not authorized to view these students",
       });
     }
 
-    if (["completed", "cancelled"].includes(appointment.status)) {
-      return res.status(400).json({
-        success: false,
-        message: "This appointment cannot be cancelled",
-      });
+    // Active assignments filter
+    const assignmentFilter = {
+      status: "active",
+    };
+
+    // Counsellor sirf apne assigned students dekhega
+    if (roleName === "counsellor") {
+      assignmentFilter.counsellor = req.userId;
     }
 
-    const activeSession = await CounsellingSession.findOne({
-      appointment: appointment._id,
-      status: "in_progress",
-    });
+    const assignments = await CounsellingAssignment.find(assignmentFilter)
+      .populate({
+        path: "counsellingRequest",
+        select: "requestNumber student status admissionLevel academicYear",
+        populate: {
+          path: "student",
+          select: "name email contact",
+        },
+      })
+      .populate("counsellor", "name email")
+      .sort({ assignedAt: -1 });
 
-    if (activeSession) {
-      return res.status(400).json({
-        success: false,
-        message: "Appointment cannot be cancelled while a session is in progress",
-      });
-    }
+    const data = assignments
+      .filter((item) => item.counsellingRequest && item.counsellingRequest.student)
+      .map((item) => ({
+        assignmentId: item._id,
+        counsellingRequestId: item.counsellingRequest._id,
+        requestNumber: item.counsellingRequest.requestNumber,
 
-    appointment.status = "cancelled";
-    appointment.cancelledBy = req.userId;
-    appointment.cancellationReason = cancellationReason;
+        student: {
+          _id: item.counsellingRequest.student._id,
+          name: item.counsellingRequest.student.name,
+          email: item.counsellingRequest.student.email,
+          contact: item.counsellingRequest.student.contact || "",
+        },
 
-    await appointment.save();
+        counsellor: {
+          _id: item.counsellor?._id,
+          name: item.counsellor?.name || "",
+          email: item.counsellor?.email || "",
+        },
 
-    // Pending/scheduled sessions ko cancel karo; completed sessions preserve rahenge
-    await CounsellingSession.updateMany(
-      {
-        appointment: appointment._id,
-        status: "scheduled",
-      },
-      {
-        $set: { status: "cancelled" },
-      }
-    );
+        admissionLevel: item.counsellingRequest.admissionLevel,
+        academicYear: item.counsellingRequest.academicYear,
+        requestStatus: item.counsellingRequest.status,
+      }));
 
-    return res.json({
+    return res.status(200).json({
       success: true,
-      message: "Appointment cancelled successfully",
-      data: appointment,
+      message: "Available appointment students fetched successfully",
+      total: data.length,
+      data,
     });
   } catch (error) {
-    return sendServerError(res, error, "Failed to update appointment");
+    console.error("Get available appointment students error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch available appointment students",
+      error: error.message,
+    });
   }
 });
-
 
 
 
@@ -8010,8 +8129,11 @@ app.post("/create-counselling-session", verifyToken, async (req, res) => {
 
 
 
+
 app.put("/complete-counselling-session/:id", verifyToken, async (req, res) => {
   try {
+    const { id } = req.params;
+
     const {
       discussion = "",
       outcome = "",
@@ -8021,6 +8143,15 @@ app.put("/complete-counselling-session/:id", verifyToken, async (req, res) => {
       endTime = "",
     } = req.body;
 
+    // 1. Validate session ID
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid session ID",
+      });
+    }
+
+    // 2. Role check
     const user = await getLoggedInUser(req.userId);
     const role = getRoleName(user);
 
@@ -8031,7 +8162,8 @@ app.put("/complete-counselling-session/:id", verifyToken, async (req, res) => {
       });
     }
 
-    const session = await CounsellingSession.findById(req.params.id);
+    // 3. Find session
+    const session = await CounsellingSession.findById(id);
 
     if (!session) {
       return res.status(404).json({
@@ -8040,6 +8172,7 @@ app.put("/complete-counselling-session/:id", verifyToken, async (req, res) => {
       });
     }
 
+    // 4. Counsellor ownership check
     if (
       role === "counsellor" &&
       String(session.counsellor) !== String(req.userId)
@@ -8050,6 +8183,7 @@ app.put("/complete-counselling-session/:id", verifyToken, async (req, res) => {
       });
     }
 
+    // 5. Session status check
     if (session.status !== "in_progress" || !session.startedAt) {
       return res.status(400).json({
         success: false,
@@ -8057,30 +8191,45 @@ app.put("/complete-counselling-session/:id", verifyToken, async (req, res) => {
       });
     }
 
-    const completedAt = new Date();
+    // 6. Required fields
+    if (!discussion.trim() || !outcome.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Discussion and outcome are required",
+      });
+    }
 
-    session.discussion = discussion;
-    session.outcome = outcome;
-    session.nextSteps = nextSteps;
-    session.recommendations = Array.isArray(recommendations)
-      ? recommendations
-      : [];
-    session.nextFollowUpDate = nextFollowUpDate
+    if (!Array.isArray(recommendations)) {
+      return res.status(400).json({
+        success: false,
+        message: "Recommendations must be an array",
+      });
+    }
+
+    // 7. Validate follow-up date
+    const followUpDate = nextFollowUpDate
       ? new Date(nextFollowUpDate)
       : null;
 
-    if (
-      session.nextFollowUpDate &&
-      Number.isNaN(session.nextFollowUpDate.getTime())
-    ) {
+    if (followUpDate && Number.isNaN(followUpDate.getTime())) {
       return res.status(400).json({
         success: false,
         message: "Invalid next follow-up date",
       });
     }
 
+    // 8. Complete session
+    const completedAt = new Date();
+
+    session.discussion = discussion.trim();
+    session.outcome = outcome.trim();
+    session.nextSteps = nextSteps;
+    session.recommendations = recommendations;
+    session.nextFollowUpDate = followUpDate;
+
     session.status = "completed";
     session.completedAt = completedAt;
+
     session.durationMinutes = Math.max(
       0,
       Math.round(
@@ -8099,19 +8248,20 @@ app.put("/complete-counselling-session/:id", verifyToken, async (req, res) => {
 
     await session.save();
 
-    // Appointment ko yahan completed nahi karna hai.
-    // Future follow-up sessions isi appointment ke andar ban sakte hain.
-
     return res.json({
       success: true,
       message: "Counselling session completed successfully",
       data: session,
     });
+
   } catch (error) {
-    return sendServerError(res, error, "Failed to complete counselling session");
+    return sendServerError(
+      res,
+      error,
+      "Failed to complete counselling session"
+    );
   }
 });
-
 
 
 
@@ -8426,6 +8576,197 @@ app.post("/student/session-feedback/:sessionId", verifyToken, async (req, res) =
 });
 
 
+app.get("/admin/all-session-feedbacks", verifyToken, async (req, res) => {
+  try {
+    const user = await getLoggedInUser(req.userId);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const roleName = getRoleName(user);
+
+    if (!["admin", "superadmin"].includes(roleName)) {
+      return res.status(403).json({
+        success: false,
+        message: "Only Admin and SuperAdmin can access all feedbacks",
+      });
+    }
+
+    const feedbacks = await SessionFeedback.find()
+      .populate("session", "sessionNumber sessionDate status outcome")
+      .populate("student", "name email")
+      .populate("counsellor", "name email")
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      message: "All session feedbacks fetched successfully",
+      total: feedbacks.length,
+      data: feedbacks,
+    });
+
+  } catch (error) {
+    return sendServerError(
+      res,
+      error,
+      "Failed to fetch all session feedbacks"
+    );
+  }
+});
+
+
+
+app.get("/counsellor/my-session-feedbacks", verifyToken, async (req, res) => {
+  try {
+    const user = await getLoggedInUser(req.userId);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    if (getRoleName(user) !== "counsellor") {
+      return res.status(403).json({
+        success: false,
+        message: "Only counsellors can access their feedbacks",
+      });
+    }
+
+    const feedbacks = await SessionFeedback.find({
+      counsellor: req.userId,
+    })
+      .populate("session", "sessionNumber sessionDate status outcome")
+      .populate("student", "name email")
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      message: "Counsellor feedbacks fetched successfully",
+      total: feedbacks.length,
+      data: feedbacks,
+    });
+
+  } catch (error) {
+    return sendServerError(
+      res,
+      error,
+      "Failed to fetch counsellor feedbacks"
+    );
+  }
+});
+
+
+app.get("/counsellor/my-feedback-summary", verifyToken, async (req, res) => {
+  try {
+    const user = await getLoggedInUser(req.userId);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    if (getRoleName(user) !== "counsellor") {
+      return res.status(403).json({
+        success: false,
+        message: "Only counsellors can view their feedback summary",
+      });
+    }
+
+    // 1. Aggregate feedback data
+    const summary = await SessionFeedback.aggregate([
+      {
+        $match: {
+          counsellor: new mongoose.Types.ObjectId(
+            req.userId.toString()
+          ),
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalFeedbacks: { $sum: 1 },
+          averageRating: { $avg: "$rating" },
+
+          fiveStars: {
+            $sum: {
+              $cond: [{ $eq: ["$rating", 5] }, 1, 0],
+            },
+          },
+
+          fourStars: {
+            $sum: {
+              $cond: [{ $eq: ["$rating", 4] }, 1, 0],
+            },
+          },
+
+          threeStars: {
+            $sum: {
+              $cond: [{ $eq: ["$rating", 3] }, 1, 0],
+            },
+          },
+
+          twoStars: {
+            $sum: {
+              $cond: [{ $eq: ["$rating", 2] }, 1, 0],
+            },
+          },
+
+          oneStar: {
+            $sum: {
+              $cond: [{ $eq: ["$rating", 1] }, 1, 0],
+            },
+          },
+        },
+      },
+    ]);
+
+    // 2. Default values when no feedback exists
+    const result = summary.length > 0
+      ? summary[0]
+      : {
+          totalFeedbacks: 0,
+          averageRating: 0,
+          fiveStars: 0,
+          fourStars: 0,
+          threeStars: 0,
+          twoStars: 0,
+          oneStar: 0,
+        };
+
+    // Remove MongoDB grouping ID
+    delete result._id;
+
+    // 3. Round average rating to 2 decimal places
+    result.averageRating = Number(
+      result.averageRating.toFixed(2)
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Counsellor feedback summary fetched successfully",
+      data: result,
+    });
+
+  } catch (error) {
+    return sendServerError(
+      res,
+      error,
+      "Failed to fetch counsellor feedback summary"
+    );
+  }
+});
+
+
+
+
 
 app.get("/student/my-session-feedbacks", verifyToken, async (req, res) => {
   try {
@@ -8676,9 +9017,10 @@ app.post("/create-follow-up", verifyToken, async (req, res) => {
 });
 
 
+
 app.put("/update-overdue-follow-ups", verifyToken, async (req, res) => {
   try {
-    // Logged-in user find karo
+    // 1. Logged-in user find karo
     const user = await User1.findById(req.userId).populate("role");
 
     if (!user) {
@@ -8688,7 +9030,7 @@ app.put("/update-overdue-follow-ups", verifyToken, async (req, res) => {
       });
     }
 
-    // Role check
+    // 2. Role check
     const roleName = user.role?.roleName
       ?.toLowerCase()
       .replace(/[\s_-]/g, "");
@@ -8697,15 +9039,18 @@ app.put("/update-overdue-follow-ups", verifyToken, async (req, res) => {
     if (!["admin", "superadmin"].includes(roleName)) {
       return res.status(403).json({
         success: false,
-        message: "Only Admin and SuperAdmin can update overdue follow-ups",
+        message:
+          "Only Admin and SuperAdmin can update overdue follow-ups",
       });
     }
 
-    // Pending follow-ups jinki due date nikal chuki hai
+    // 3. Pending follow-ups whose due date has passed
+    // Completed records ko overdue nahi karna
     const result = await FollowUp.updateMany(
       {
         status: "pending",
         dueAt: { $lt: new Date() },
+        completedAt: { $exists: false },
       },
       {
         $set: {
@@ -8714,6 +9059,7 @@ app.put("/update-overdue-follow-ups", verifyToken, async (req, res) => {
       }
     );
 
+    // 4. Response
     return res.status(200).json({
       success: true,
       message: "Overdue follow-ups updated successfully",
@@ -8730,6 +9076,7 @@ app.put("/update-overdue-follow-ups", verifyToken, async (req, res) => {
     });
   }
 });
+
 
 
 app.get("/get-follow-ups", verifyToken, async (req, res) => {
@@ -8940,11 +9287,13 @@ app.put("/update-follow-up/:id", verifyToken, async (req, res) => {
 
 
 
+
 app.put("/complete-follow-up/:id", verifyToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { outcome } = req.body;
 
+    // 1. Validate ID
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
         success: false,
@@ -8952,6 +9301,7 @@ app.put("/complete-follow-up/:id", verifyToken, async (req, res) => {
       });
     }
 
+    // 2. Find logged-in user
     const user = await User1.findById(req.userId).populate("role");
 
     if (!user) {
@@ -8961,6 +9311,7 @@ app.put("/complete-follow-up/:id", verifyToken, async (req, res) => {
       });
     }
 
+    // 3. Role check
     const roleName = user.role?.roleName
       ?.toLowerCase()
       .replace(/[\s_-]/g, "");
@@ -8972,6 +9323,7 @@ app.put("/complete-follow-up/:id", verifyToken, async (req, res) => {
       });
     }
 
+    // 4. Find follow-up
     const followUp = await FollowUp.findById(id);
 
     if (!followUp) {
@@ -8981,6 +9333,7 @@ app.put("/complete-follow-up/:id", verifyToken, async (req, res) => {
       });
     }
 
+    // 5. Counsellor ownership check
     if (
       roleName === "counsellor" &&
       followUp.assignedTo.toString() !== req.userId.toString()
@@ -8991,19 +9344,22 @@ app.put("/complete-follow-up/:id", verifyToken, async (req, res) => {
       });
     }
 
-    if (followUp.status !== "pending") {
+    // 6. Allow pending and overdue follow-ups
+    if (!["pending", "overdue"].includes(followUp.status)) {
       return res.status(400).json({
         success: false,
-        message: "Only pending follow-ups can be completed",
+        message: "Only pending or overdue follow-ups can be completed",
       });
     }
 
+    // 7. Complete follow-up
     followUp.status = "completed";
     followUp.completedAt = new Date();
     followUp.outcome = outcome || "";
 
     await followUp.save();
 
+    // 8. Populate response
     const completedFollowUp = await FollowUp.findById(id)
       .populate("counsellingRequest", "requestNumber status")
       .populate("student", "name email")
@@ -9026,6 +9382,569 @@ app.put("/complete-follow-up/:id", verifyToken, async (req, res) => {
     });
   }
 });
+
+
+app.put("/start-counselling-session/:id", verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid session ID",
+      });
+    }
+
+    const user = await getLoggedInUser(req.userId);
+    const role = getRoleName(user);
+
+    if (!["admin", "superadmin", "counsellor"].includes(role)) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not authorized to start this session",
+      });
+    }
+
+    const session = await CounsellingSession.findById(id);
+
+    if (!session) {
+      return res.status(404).json({
+        success: false,
+        message: "Counselling session not found",
+      });
+    }
+
+    if (
+      role === "counsellor" &&
+      String(session.counsellor) !== String(req.userId)
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "This session is not assigned to you",
+      });
+    }
+
+    if (session.status !== "scheduled") {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot start session. Current status is ${session.status}`,
+      });
+    }
+
+    session.status = "in_progress";
+    session.startedAt = new Date();
+
+    await session.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Counselling session started successfully",
+      data: session,
+    });
+
+  } catch (error) {
+    return sendServerError(res, error, "Failed to start counselling session");
+  }
+});
+
+
+app.post("/student/request-reschedule/:id", verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const {
+      requestedAppointmentDate,
+      requestedAppointmentTime,
+      requestedMeetingMode,
+      requestedMeetingLink = "",
+      requestedLocation = "",
+      reason = "",
+    } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid appointment ID",
+      });
+    }
+
+    if (
+      !requestedAppointmentDate ||
+      !requestedAppointmentTime ||
+      !requestedMeetingMode
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Date, time and meeting mode are required",
+      });
+    }
+
+    if (!["online", "offline"].includes(requestedMeetingMode)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid meeting mode",
+      });
+    }
+
+    if (
+      requestedMeetingMode === "online" &&
+      !requestedMeetingLink.trim()
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Meeting link is required for online meeting",
+      });
+    }
+
+    if (
+      requestedMeetingMode === "offline" &&
+      !requestedLocation.trim()
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Location is required for offline meeting",
+      });
+    }
+
+    const user = await getLoggedInUser(req.userId);
+    const roleName = getRoleName(user);
+
+    if (roleName !== "student") {
+      return res.status(403).json({
+        success: false,
+        message: "Only students can request rescheduling",
+      });
+    }
+
+    const appointment = await Appointment.findById(id);
+
+    if (!appointment) {
+      return res.status(404).json({
+        success: false,
+        message: "Appointment not found",
+      });
+    }
+
+    if (
+      appointment.student.toString() !== req.userId.toString()
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "You cannot reschedule another student's appointment",
+      });
+    }
+
+    if (!["pending", "scheduled", "rescheduled"].includes(appointment.status)) {
+      return res.status(400).json({
+        success: false,
+        message: "This appointment cannot be rescheduled",
+      });
+    }
+
+    const existingPendingRequest = appointment.rescheduleRequests.find(
+      (request) => request.status === "pending"
+    );
+
+    if (existingPendingRequest) {
+      return res.status(400).json({
+        success: false,
+        message: "A reschedule request is already pending",
+      });
+    }
+
+    const newDate = new Date(requestedAppointmentDate);
+
+    if (Number.isNaN(newDate.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid appointment date",
+      });
+    }
+
+  
+appointment.rescheduleRequests.push({
+  // Original appointment details
+  originalAppointment: {
+    appointmentDate: appointment.appointmentDate,
+    appointmentTime: appointment.appointmentTime,
+    meetingMode: appointment.meetingMode,
+    meetingLink: appointment.meetingLink,
+    location: appointment.location,
+  },
+
+  // Requested new appointment details
+  requestedAppointmentDate: newDate,
+  requestedAppointmentTime: requestedAppointmentTime.trim(),
+  requestedMeetingMode,
+
+  requestedMeetingLink:
+    requestedMeetingMode === "online"
+      ? requestedMeetingLink.trim()
+      : "",
+
+  requestedLocation:
+    requestedMeetingMode === "offline"
+      ? requestedLocation.trim()
+      : "",
+
+  reason: reason.trim(),
+  requestedBy: req.userId,
+  status: "pending",
+});
+
+
+    await appointment.save();
+
+    const updatedAppointment = await Appointment.findById(id)
+      .populate("student", "name email")
+      .populate("counsellor", "name email");
+
+    return res.status(201).json({
+      success: true,
+      message: "Reschedule request submitted successfully",
+      data: updatedAppointment,
+    });
+  } catch (error) {
+    console.error("Request reschedule error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+});
+
+
+app.put("/counsellor/review-reschedule/:appointmentId/:requestId",
+  verifyToken,
+  async (req, res) => {
+    try {
+      const { appointmentId, requestId } = req.params;
+      const { action, reviewNote = "" } = req.body;
+
+      // 1. Validate IDs
+      if (
+        !mongoose.Types.ObjectId.isValid(appointmentId) ||
+        !mongoose.Types.ObjectId.isValid(requestId)
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid appointment or request ID",
+        });
+      }
+
+      // 2. Validate action
+      if (!["approve", "reject"].includes(action)) {
+        return res.status(400).json({
+          success: false,
+          message: "Action must be approve or reject",
+        });
+      }
+
+      // 3. Get logged-in user
+      const user = await getLoggedInUser(req.userId);
+      const roleName = getRoleName(user);
+
+      if (!["counsellor", "admin", "superadmin"].includes(roleName)) {
+        return res.status(403).json({
+          success: false,
+          message: "You are not authorized to review reschedule requests",
+        });
+      }
+
+      // 4. Find appointment
+      const appointment = await Appointment.findById(appointmentId);
+
+      if (!appointment) {
+        return res.status(404).json({
+          success: false,
+          message: "Appointment not found",
+        });
+      }
+
+      // 5. Counsellor ownership check
+      if (
+        roleName === "counsellor" &&
+        appointment.counsellor.toString() !== req.userId.toString()
+      ) {
+        return res.status(403).json({
+          success: false,
+          message: "You can only review your own appointments",
+        });
+      }
+
+      // 6. Find reschedule request
+      const rescheduleRequest = appointment.rescheduleRequests.id(requestId);
+
+      if (!rescheduleRequest) {
+        return res.status(404).json({
+          success: false,
+          message: "Reschedule request not found",
+        });
+      }
+
+      if (rescheduleRequest.status !== "pending") {
+        return res.status(400).json({
+          success: false,
+          message: "This reschedule request has already been reviewed",
+        });
+      }
+
+      if (!["pending", "scheduled", "rescheduled"].includes(appointment.status)) {
+        return res.status(400).json({
+          success: false,
+          message: "This appointment cannot be rescheduled",
+        });
+      }
+
+      // 7. Approve request
+      if (action === "approve") {
+        // Save old appointment details in history
+        appointment.rescheduleHistory.push({
+          oldAppointmentDate: appointment.appointmentDate,
+          oldAppointmentTime: appointment.appointmentTime,
+          oldMeetingMode: appointment.meetingMode,
+          oldMeetingLink: appointment.meetingLink,
+          oldLocation: appointment.location,
+          rescheduledAt: new Date(),
+          rescheduledBy: req.userId,
+        });
+
+        // Update appointment with requested details
+        appointment.appointmentDate =
+          rescheduleRequest.requestedAppointmentDate;
+
+        appointment.appointmentTime =
+          rescheduleRequest.requestedAppointmentTime;
+
+        appointment.meetingMode =
+          rescheduleRequest.requestedMeetingMode;
+
+        appointment.meetingLink =
+          rescheduleRequest.requestedMeetingLink;
+
+        appointment.location =
+          rescheduleRequest.requestedLocation;
+
+        appointment.status = "rescheduled";
+
+        rescheduleRequest.status = "approved";
+      } else {
+        // Reject request
+        rescheduleRequest.status = "rejected";
+      }
+
+      // 8. Save review details
+      rescheduleRequest.reviewedBy = req.userId;
+      rescheduleRequest.reviewedAt = new Date();
+      rescheduleRequest.reviewNote = reviewNote.trim();
+
+      await appointment.save();
+
+      const updatedAppointment = await Appointment.findById(appointmentId)
+        .populate("student", "name email")
+        .populate("counsellor", "name email");
+
+      return res.status(200).json({
+        success: true,
+        message:
+          action === "approve"
+            ? "Reschedule request approved successfully"
+            : "Reschedule request rejected successfully",
+        data: updatedAppointment,
+      });
+    } catch (error) {
+      console.error("Review reschedule error:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        error: error.message,
+      });
+    }
+  }
+);
+
+
+app.get("/student/my-reschedule-requests", verifyToken, async (req, res) => {
+  try {
+    // 1. Logged-in user
+    const user = await getLoggedInUser(req.userId);
+    const roleName = getRoleName(user);
+
+    // 2. Student-only access
+    if (roleName !== "student") {
+      return res.status(403).json({
+        success: false,
+        message: "Only students can access their reschedule requests",
+      });
+    }
+
+    // 3. Find student's appointments having reschedule requests
+    const appointments = await Appointment.find({
+      student: req.userId,
+      "rescheduleRequests.0": { $exists: true },
+    })
+      .populate("counsellor", "name email")
+      .sort({ updatedAt: -1 })
+      .lean();
+
+    // 4. Extract all reschedule requests
+    const rescheduleRequests = [];
+
+    appointments.forEach((appointment) => {
+      appointment.rescheduleRequests.forEach((request) => {
+        rescheduleRequests.push({
+          requestId: request._id,
+          appointmentId: appointment._id,
+          appointmentNumber: appointment.appointmentNumber,
+
+          counsellor: appointment.counsellor,
+
+          oldAppointment: {
+            appointmentDate:
+              appointment.rescheduleHistory.find(
+                (history) =>
+                  history.rescheduledAt >= request.requestedAt &&
+                  history.rescheduledBy?.toString() ===
+                    request.reviewedBy?.toString()
+              )?.oldAppointmentDate || null,
+            appointmentTime:
+              appointment.rescheduleHistory.find(
+                (history) =>
+                  history.rescheduledAt >= request.requestedAt &&
+                  history.rescheduledBy?.toString() ===
+                    request.reviewedBy?.toString()
+              )?.oldAppointmentTime || null,
+          },
+
+          requestedAppointment: {
+            date: request.requestedAppointmentDate,
+            time: request.requestedAppointmentTime,
+            meetingMode: request.requestedMeetingMode,
+            meetingLink: request.requestedMeetingLink,
+            location: request.requestedLocation,
+          },
+
+          reason: request.reason,
+          status: request.status,
+          requestedAt: request.requestedAt,
+          reviewedBy: request.reviewedBy,
+          reviewedAt: request.reviewedAt,
+          reviewNote: request.reviewNote,
+        });
+      });
+    });
+
+    // 5. Latest requests first
+    rescheduleRequests.sort(
+      (a, b) =>
+        new Date(b.requestedAt) - new Date(a.requestedAt)
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Student reschedule requests fetched successfully",
+      totalRequests: rescheduleRequests.length,
+      data: rescheduleRequests,
+    });
+  } catch (error) {
+    console.error("My reschedule requests error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+});
+
+
+app.get("/counsellor/pending-reschedule-requests",
+  verifyToken,
+  async (req, res) => {
+    try {
+      // 1. Logged-in user
+      const user = await getLoggedInUser(req.userId);
+      const roleName = getRoleName(user);
+
+      // 2. Counsellor-only access
+      if (roleName !== "counsellor") {
+        return res.status(403).json({
+          success: false,
+          message: "Only counsellors can access pending reschedule requests",
+        });
+      }
+
+      // 3. Find counsellor's appointments with pending requests
+      const appointments = await Appointment.find({
+        counsellor: req.userId,
+        "rescheduleRequests.status": "pending",
+      })
+        .populate("student", "name email")
+        .populate("counsellor", "name email")
+        .sort({ updatedAt: -1 })
+        .lean();
+
+      // 4. Extract pending requests only
+      const pendingRequests = [];
+
+      appointments.forEach((appointment) => {
+        appointment.rescheduleRequests.forEach((request) => {
+          if (request.status === "pending") {
+            pendingRequests.push({
+              requestId: request._id,
+
+              appointmentId: appointment._id,
+              appointmentNumber: appointment.appointmentNumber,
+
+              student: appointment.student,
+              counsellor: appointment.counsellor,
+
+              originalAppointment: request.originalAppointment,
+
+              requestedAppointment: {
+                date: request.requestedAppointmentDate,
+                time: request.requestedAppointmentTime,
+                meetingMode: request.requestedMeetingMode,
+                meetingLink: request.requestedMeetingLink,
+                location: request.requestedLocation,
+              },
+
+              reason: request.reason,
+              status: request.status,
+              requestedAt: request.requestedAt,
+            });
+          }
+        });
+      });
+
+      // 5. Latest requests first
+      pendingRequests.sort(
+        (a, b) =>
+          new Date(b.requestedAt) - new Date(a.requestedAt)
+      );
+
+      return res.status(200).json({
+        success: true,
+        message: "Pending reschedule requests fetched successfully",
+        totalRequests: pendingRequests.length,
+        data: pendingRequests,
+      });
+    } catch (error) {
+      console.error("Pending reschedule requests error:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        error: error.message,
+      });
+    }
+  }
+);
+
+
 
 
 

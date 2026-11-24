@@ -126,7 +126,98 @@ const appointmentSchema = new mongoose.Schema(
       default: "",
     },
 
-    rescheduleHistory: [
+rescheduleRequests: [
+  {
+    // Original appointment snapshot
+    originalAppointment: {
+      appointmentDate: {
+        type: Date,
+      },
+      appointmentTime: {
+        type: String,
+      },
+      meetingMode: {
+        type: String,
+        enum: ["online", "offline"],
+      },
+      meetingLink: {
+        type: String,
+        default: "",
+      },
+      location: {
+        type: String,
+        default: "",
+      },
+    },
+
+    // Requested appointment details
+    requestedAppointmentDate: {
+      type: Date,
+      required: true,
+    },
+
+    requestedAppointmentTime: {
+      type: String,
+      required: true,
+    },
+
+    requestedMeetingMode: {
+      type: String,
+      enum: ["online", "offline"],
+      required: true,
+    },
+
+    requestedMeetingLink: {
+      type: String,
+      default: "",
+    },
+
+    requestedLocation: {
+      type: String,
+      default: "",
+    },
+
+    reason: {
+      type: String,
+      default: "",
+    },
+
+    status: {
+      type: String,
+      enum: ["pending", "approved", "rejected"],
+      default: "pending",
+    },
+
+    requestedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User1",
+      required: true,
+    },
+
+    requestedAt: {
+      type: Date,
+      default: Date.now,
+    },
+
+    reviewedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User1",
+      default: null,
+    },
+
+    reviewedAt: {
+      type: Date,
+      default: null,
+    },
+
+    reviewNote: {
+      type: String,
+      default: "",
+    },
+  },
+],
+
+rescheduleHistory: [
       {
         oldAppointmentDate: {
           type: Date,

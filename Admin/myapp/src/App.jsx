@@ -34,7 +34,7 @@ const App = () => {
   return (
     <Routes>
       {/* Normal Pages */}
-      {/* <Route path="/" element={<Home />} /> */}
+      <Route path="/" element={<Login />} />
       <Route path="/user" element={<User />} />
       <Route path="/" element={<Login />} />
       <Route path="/forget" element={<Forget />} />
