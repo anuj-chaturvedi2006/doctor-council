@@ -104,10 +104,17 @@ const [historyError, setHistoryError] = useState("");
       setStudentsLoading(true);
       setCreateError("");
 
-      const response = await axios.get(
-        `${API_URL}/get-available-appointment-students`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      console.log("Token:", token);
+console.log("API URL:", API_URL);
+
+const response = await axios.get(
+  `${API_URL}/get-available-appointment-students`,
+  {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  }
+);
 
       if (response.data.success) {
         setAvailableStudents(response.data.data || []);
