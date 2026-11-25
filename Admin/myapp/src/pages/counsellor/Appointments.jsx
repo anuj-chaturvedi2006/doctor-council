@@ -45,6 +45,12 @@ const [historyError, setHistoryError] = useState("");
     purpose: "",
     notes: "",
   });
+  // Cancellation modal state
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelAppointmentId, setCancelAppointmentId] = useState("");
+  const [cancellationReason, setCancellationReason] = useState("");
+  const [cancellingAppointment, setCancellingAppointment] = useState(false);
+  const [cancelError, setCancelError] = useState("");
   // Fetch Appointments
   const fetchAppointments = useCallback(async () => {
     const token = localStorage.getItem("token");
@@ -104,10 +110,7 @@ const [historyError, setHistoryError] = useState("");
       setStudentsLoading(true);
       setCreateError("");
 
-      console.log("Token:", token);
-console.log("API URL:", API_URL);
-
-const response = await axios.get(
+      const response = await axios.get(
   `${API_URL}/get-available-appointment-students`,
   {
     headers: {
@@ -216,9 +219,15 @@ const response = await axios.get(
 
   // Update Appointment Status
   const updateAppointmentStatus = async (id, status) => {
-    const action = status === "completed" ? "complete" : "cancel";
+    if (status === "cancelled") {
+      setCancelAppointmentId(id);
+      setCancellationReason("");
+      setCancelError("");
+      setShowCancelModal(true);
+      return;
+    }
 
-    if (!window.confirm(`Are you sure you want to ${action} this appointment?`)) {
+    if (!window.confirm("Are you sure you want to complete this appointment?")) {
       return;
     }
 
@@ -226,31 +235,60 @@ const response = await axios.get(
 
     try {
       setUpdatingId(id);
-
       const response = await axios.put(
         `${API_URL}/update-appointment-status/${id}`,
         { status },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
+        { headers: { Authorization: `Bearer ${token}` } }
       );
 
       if (response.data.success) {
         alert(response.data.message);
         setSelectedAppointment(null);
-        fetchAppointments();
+        await fetchAppointments();
       }
     } catch (err) {
       console.error("Update Appointment Error:", err);
-
-      alert(
-        err.response?.data?.message ||
-          "Unable to update appointment"
-      );
+      alert(err.response?.data?.message || "Unable to update appointment");
     } finally {
       setUpdatingId(null);
+    }
+  };
+
+  const confirmCancelAppointment = async (e) => {
+    e.preventDefault();
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      setCancelError("Please login again.");
+      return;
+    }
+    if (!cancellationReason.trim()) {
+      setCancelError("Please enter a cancellation reason.");
+      return;
+    }
+
+    try {
+      setCancellingAppointment(true);
+      setCancelError("");
+      const response = await axios.put(
+        `${API_URL}/update-appointment-status/${cancelAppointmentId}`,
+        { status: "cancelled", cancellationReason: cancellationReason.trim() },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (response.data.success) {
+        alert(response.data.message || "Appointment cancelled successfully.");
+        setShowCancelModal(false);
+        setCancelAppointmentId("");
+        setCancellationReason("");
+        setSelectedAppointment(null);
+        await fetchAppointments();
+      }
+    } catch (err) {
+      console.error("Cancel Appointment Error:", err);
+      setCancelError(err.response?.data?.message || "Unable to cancel appointment.");
+    } finally {
+      setCancellingAppointment(false);
     }
   };
 
@@ -742,6 +780,76 @@ const openAppointmentDetails = (appointment) => {
                   className="px-5 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50"
                 >
                   {creatingAppointment ? "Creating..." : "Create Appointment"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel Appointment Modal */}
+      {showCancelModal && (
+        <div className="fixed inset-0 z-[70] bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-xl">
+            <div className="flex items-center justify-between p-5 border-b">
+              <div>
+                <h2 className="text-lg font-bold text-slate-800">Cancel Appointment</h2>
+                <p className="text-sm text-slate-500 mt-1">Please provide a reason for cancellation.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!cancellingAppointment) {
+                    setShowCancelModal(false);
+                    setCancelError("");
+                  }
+                }}
+                className="p-2 hover:bg-slate-100 rounded-lg"
+                disabled={cancellingAppointment}
+              >
+                <FiX size={21} />
+              </button>
+            </div>
+
+            <form onSubmit={confirmCancelAppointment} className="p-5 space-y-4">
+              {cancelError && (
+                <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-lg text-sm">
+                  {cancelError}
+                </div>
+              )}
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Cancellation Reason <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={cancellationReason}
+                  onChange={(e) => setCancellationReason(e.target.value)}
+                  rows={4}
+                  maxLength={500}
+                  required
+                  placeholder="Enter why this appointment is being cancelled..."
+                  className="w-full border rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-red-500"
+                />
+                <p className="text-xs text-slate-400 text-right mt-1">{cancellationReason.length}/500</p>
+              </div>
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 border-t pt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCancelModal(false);
+                    setCancelError("");
+                  }}
+                  disabled={cancellingAppointment}
+                  className="px-5 py-2.5 border rounded-lg text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  Go Back
+                </button>
+                <button
+                  type="submit"
+                  disabled={cancellingAppointment || !cancellationReason.trim()}
+                  className="px-5 py-2.5 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 disabled:opacity-50"
+                >
+                  {cancellingAppointment ? "Cancelling..." : "Confirm Cancellation"}
                 </button>
               </div>
             </form>
