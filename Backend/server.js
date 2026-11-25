@@ -8205,12 +8205,18 @@ app.put("/complete-counselling-session/:id", verifyToken, async (req, res) => {
     }
 
     // 6. Required fields
-    if (!discussion.trim() || !outcome.trim()) {
-      return res.status(400).json({
-        success: false,
-        message: "Discussion and outcome are required",
-      });
-    }
+  if (
+  typeof discussion !== "string" ||
+  typeof outcome !== "string" ||
+  typeof nextSteps !== "string" ||
+  !discussion.trim() ||
+  !outcome.trim()
+) {
+  return res.status(400).json({
+    success: false,
+    message: "Valid discussion and outcome are required",
+  });
+}
 
     if (!Array.isArray(recommendations)) {
       return res.status(400).json({
@@ -8220,17 +8226,23 @@ app.put("/complete-counselling-session/:id", verifyToken, async (req, res) => {
     }
 
     // 7. Validate follow-up date
-    const followUpDate = nextFollowUpDate
-      ? new Date(nextFollowUpDate)
-      : null;
+  const followUpDate = nextFollowUpDate
+  ? new Date(nextFollowUpDate)
+  : null;
 
-    if (followUpDate && Number.isNaN(followUpDate.getTime())) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid next follow-up date",
-      });
-    }
+if (followUpDate && Number.isNaN(followUpDate.getTime())) {
+  return res.status(400).json({
+    success: false,
+    message: "Invalid next follow-up date",
+  });
+}
 
+if (followUpDate && followUpDate < new Date()) {
+  return res.status(400).json({
+    success: false,
+    message: "Next follow-up date cannot be in the past",
+  });
+}
     // 8. Complete session
     const completedAt = new Date();
 
