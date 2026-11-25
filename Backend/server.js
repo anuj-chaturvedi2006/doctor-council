@@ -8050,12 +8050,12 @@ app.post("/create-counselling-session", verifyToken, async (req, res) => {
       });
     }
 
-    if (!["scheduled", "rescheduled", "in_progress"].includes(appointment.status)) {
-      return res.status(400).json({
-        success: false,
-        message: "Approve the appointment before creating a session",
-      });
-    }
+   if (!["scheduled", "rescheduled"].includes(appointment.status)) {
+  return res.status(400).json({
+    success: false,
+    message: "Only scheduled or rescheduled appointments can have a session created",
+  });
+}
 
     const finalSessionDate = sessionDate
       ? new Date(sessionDate)
@@ -8098,6 +8098,19 @@ app.post("/create-counselling-session", verifyToken, async (req, res) => {
         message: "Location is required for offline session",
       });
     }
+
+    const existingSession = await CounsellingSession.findOne({
+  appointment: appointment._id,
+});
+
+if (existingSession) {
+  return res.status(409).json({
+    success: false,
+    message: "A counselling session already exists for this appointment",
+    sessionId: existingSession._id,
+    sessionNumber: existingSession.sessionNumber,
+  });
+}
 
     const session = await CounsellingSession.create({
       sessionNumber: `CS-${Date.now()}`,
