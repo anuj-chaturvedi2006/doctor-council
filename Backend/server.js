@@ -8143,7 +8143,10 @@ if (existingSession) {
 
 
 
+
 app.put("/complete-counselling-session/:id", verifyToken, async (req, res) => {
+  let createdFollowUp = null;
+
   try {
     const { id } = req.params;
 
@@ -8204,19 +8207,19 @@ app.put("/complete-counselling-session/:id", verifyToken, async (req, res) => {
       });
     }
 
-    // 6. Required fields
-  if (
-  typeof discussion !== "string" ||
-  typeof outcome !== "string" ||
-  typeof nextSteps !== "string" ||
-  !discussion.trim() ||
-  !outcome.trim()
-) {
-  return res.status(400).json({
-    success: false,
-    message: "Valid discussion and outcome are required",
-  });
-}
+    // 6. Required fields validation
+    if (
+      typeof discussion !== "string" ||
+      typeof outcome !== "string" ||
+      typeof nextSteps !== "string" ||
+      !discussion.trim() ||
+      !outcome.trim()
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Valid discussion and outcome are required",
+      });
+    }
 
     if (!Array.isArray(recommendations)) {
       return res.status(400).json({
@@ -8226,29 +8229,30 @@ app.put("/complete-counselling-session/:id", verifyToken, async (req, res) => {
     }
 
     // 7. Validate follow-up date
-  const followUpDate = nextFollowUpDate
-  ? new Date(nextFollowUpDate)
-  : null;
+    const followUpDate = nextFollowUpDate
+      ? new Date(nextFollowUpDate)
+      : null;
 
-if (followUpDate && Number.isNaN(followUpDate.getTime())) {
-  return res.status(400).json({
-    success: false,
-    message: "Invalid next follow-up date",
-  });
-}
+    if (followUpDate && Number.isNaN(followUpDate.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid next follow-up date",
+      });
+    }
 
-if (followUpDate && followUpDate < new Date()) {
-  return res.status(400).json({
-    success: false,
-    message: "Next follow-up date cannot be in the past",
-  });
-}
-    // 8. Complete session
+    if (followUpDate && followUpDate < new Date()) {
+      return res.status(400).json({
+        success: false,
+        message: "Next follow-up date cannot be in the past",
+      });
+    }
+
+    // 8. Prepare session completion data
     const completedAt = new Date();
 
     session.discussion = discussion.trim();
     session.outcome = outcome.trim();
-    session.nextSteps = nextSteps;
+    session.nextSteps = nextSteps.trim();
     session.recommendations = recommendations;
     session.nextFollowUpDate = followUpDate;
 
@@ -8271,15 +8275,64 @@ if (followUpDate && followUpDate < new Date()) {
         hour12: true,
       });
 
+    // 9. Automatically create FollowUp
+    if (followUpDate) {
+      createdFollowUp = await FollowUp.create({
+        counsellingRequest: session.counsellingRequest,
+        student: session.student,
+        assignedTo: session.counsellor,
+        createdBy: req.userId,
+
+        title: "Post-session follow-up",
+
+        description: [
+          `Session Number: ${session.sessionNumber}`,
+          `Outcome: ${outcome.trim()}`,
+          `Next Steps: ${nextSteps.trim()}`,
+        ].join("\n"),
+
+        dueAt: followUpDate,
+        type: "call",
+      });
+    }
+
+    // 10. Save completed session
     await session.save();
+
+    // 11. Populate FollowUp details
+    let followUpData = null;
+
+    if (createdFollowUp) {
+      followUpData = await FollowUp.findById(createdFollowUp._id)
+        .populate("student", "name email")
+        .populate("assignedTo", "name email")
+        .populate("counsellingRequest");
+    }
 
     return res.json({
       success: true,
-      message: "Counselling session completed successfully",
-      data: session,
+      message: followUpData
+        ? "Counselling session completed and follow-up created successfully"
+        : "Counselling session completed successfully",
+
+      data: {
+        session,
+        followUp: followUpData,
+      },
     });
 
   } catch (error) {
+    // Rollback newly created FollowUp if session saving fails
+    if (createdFollowUp) {
+      try {
+        await FollowUp.deleteOne({
+          _id: createdFollowUp._id,
+        });
+      } catch (rollbackError) {
+        console.error("FollowUp rollback failed:", rollbackError);
+      }
+    }
+
     return sendServerError(
       res,
       error,
@@ -8287,6 +8340,7 @@ if (followUpDate && followUpDate < new Date()) {
     );
   }
 });
+
 
 
 
