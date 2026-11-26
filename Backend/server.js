@@ -3,7 +3,9 @@ const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const bcrypt = require("bcrypt");
-const nodemailer = require("nodemailer");
+
+// const nodemailer = require("nodemailer");
+
 const otpgenerator = require("otp-generator");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
@@ -32,10 +34,8 @@ const Appointment = require("./models/Appointment");
 const CounsellingSession = require("./models/CounsellingSession");
 const SessionFeedback = require("./models/SessionFeedback");
 const FollowUp = require("./models/FollowUp");
+const sendEmail = require("./utils/sendEmail");
 
-const  {Resend}  = require("resend");
-
-const resend = new Resend(process.env.RESEND_API_KEY);
 
 app.use(cors());
 app.use(express.json());
@@ -76,13 +76,13 @@ app.use("/uploads",
 
 // ================= MAILER =================
 
-const mailer = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-});
+// const mailer = nodemailer.createTransport({
+//   service: "gmail",
+//   auth: {
+//     user: process.env.EMAIL_USER,
+//     pass: process.env.EMAIL_PASS,
+//   },
+// });
 
 // ================= MONGODB =================
 const api=process.env.MONGODB_URI
@@ -1294,7 +1294,7 @@ app.post("/forget-pass", async (req, res) => {
     });
 
     console.log("Generated OTP:", token);
-console.log("STEP 2: User found");
+   console.log("STEP 2: User found");
     await Otp.findOneAndUpdate(
       { email: normalizedEmail },
       {
@@ -1316,21 +1316,31 @@ console.log("STEP 2: User found");
 
     console.log("STEP 3: OTP saved");
 
- const { data, error } = await resend.emails.send({
-  from: "Doctor Council <onboarding@resend.dev>",
-  to: [normalizedEmail],
-  subject: "OTP Verification",
+ const emailResponse = await sendEmail({
+  to: normalizedEmail,
+  subject: "Doctor Council - OTP Verification",
+
+  html: `
+    <div style="font-family: Arial; padding: 20px;">
+      <h2>Doctor Council</h2>
+      <h3>Password Reset OTP</h3>
+
+      <p>Your verification OTP is:</p>
+
+      <h1 style="color: #2563eb; letter-spacing: 5px;">
+        ${token}
+      </h1>
+
+      <p>This OTP is valid for 5 minutes.</p>
+
+      <p>Please do not share your OTP with anyone.</p>
+    </div>
+  `,
+
   text: `Your verification OTP is ${token}. This OTP is valid for 5 minutes.`,
 });
 
-if (error) {
-  console.log("Resend Email Error:", error);
-
-  return res.status(500).json({ 
-    success: false,
-    message: "OTP email could not be sent",
-  });
-}
+console.log("STEP 4: Brevo Email sent", emailResponse);
 
 console.log("STEP 4: Email sent", data);
 
@@ -1536,6 +1546,33 @@ app.post("/reset-password", async (req, res) => {
     });
   }
 });
+
+
+//brao mailer
+
+const sendEmail = require("./utils/sendEmail");
+
+app.get("/test-brevo", async (req, res) => {
+  try {
+    const result = await sendEmail({
+      to: "your-email@gmail.com",
+      subject: "Brevo API Test",
+      html: "<h2>Congratulations!</h2><p>Brevo API is working successfully.</p>",
+    });
+
+    res.json({
+      success: true,
+      message: "Email sent successfully",
+      data: result,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
 
 
 // frontend create student 
