@@ -33,7 +33,7 @@ const CounsellingSession = require("./models/CounsellingSession");
 const SessionFeedback = require("./models/SessionFeedback");
 const FollowUp = require("./models/FollowUp");
 
-const  Resend  = require("resend");
+const  {Resend}  = require("resend");
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
