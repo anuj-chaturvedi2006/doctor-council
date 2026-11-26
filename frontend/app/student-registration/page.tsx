@@ -332,7 +332,7 @@ console.log("Backend response:", data)
               Already have an account?{" "}
               <button
                 type="button"
-                onClick={() => router.push("/student-login")}
+                onClick={() => router.push("/login")}
                 className="font-bold text-teal-700 hover:text-teal-900"
               >
                 Log in

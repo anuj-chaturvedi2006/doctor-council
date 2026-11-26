@@ -391,7 +391,7 @@ export default function StudentLoginPage() {
 
               <button
                 type="button"
-                onClick={() => router.push("/forget-pass")}
+                onClick={() => router.push("/forget")}
                 className="text-sm font-bold text-blue-700 transition hover:text-blue-900"
               >
                 Forgot Password?

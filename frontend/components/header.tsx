@@ -133,7 +133,7 @@ export default function Header() {
             {!user ? (
               <>
                 <Link
-                  href="/student-login"
+                  href="/login"
                   className="rounded-xl border border-blue-950 px-5 py-3 text-sm font-bold text-blue-950 transition hover:bg-blue-950 hover:text-white"
                 >
                   Student Login

@@ -1319,69 +1319,83 @@ app.post("/forget-pass", async (req, res) => {
   }
 });
 
+
 app.post("/verifyemail-forget", async (req, res) => {
   try {
     const { email, otp } = req.body;
 
-    if (!email) {
-      return res.send({
+    if (!email || !otp) {
+      return res.status(400).json({
         success: false,
-        message: "email is required",
+        message: "Email and OTP are required",
       });
     }
 
-    if (!otp) {
-      return res.send({
-        success: false,
-        message: "OTP is required",
-      });
-    }
+    const normalizedEmail = email.trim().toLowerCase();
 
-    const verifyEmail = await Otp.findOne({ email });
-
-    if (!verifyEmail) {
-      return res.send({
-        message: "email does not exist",
-        success: false,
-      });
-    }
-
-    if (verifyEmail.expiresAt && verifyEmail.expiresAt < new Date()) {
-      return res.send({
-        message: "OTP expired",
-        success: false,
-      });
-    }
-
-    if (Number(verifyEmail.otp) !== Number(otp)) {
-      return res.send({
-        message: "OTP is wrong",
-        success: false,
-      });
-    }
-
-    await Otp.updateOne(
-      { email },
-      {
-        $set: {
-          verified: true,
-        },
-      },
-    );
-
-    res.send({
-      message: "email is verified",
-      success: true,
+    const otpData = await Otp.findOne({
+      email: normalizedEmail,
     });
-  } catch (error) {
-    console.log(error);
 
-    res.send({
-      message: "OTP verification failed",
+    if (!otpData || !otpData.otp) {
+      return res.status(404).json({
+        success: false,
+        message: "OTP not found. Please request a new OTP",
+      });
+    }
+
+    if (!otpData.expiresAt || otpData.expiresAt < new Date()) {
+      return res.status(400).json({
+        success: false,
+        message: "OTP expired. Please request a new OTP",
+      });
+    }
+
+    if (String(otpData.otp) !== String(otp)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid OTP",
+      });
+    }
+
+    // Generate secure reset token
+    const resetToken = crypto.randomBytes(32).toString("hex");
+
+    // Hash token before saving in database
+    const resetTokenHash = crypto
+      .createHash("sha256")
+      .update(resetToken)
+      .digest("hex");
+
+    // Save hashed token and consume OTP
+    otpData.verified = true;
+    otpData.otp = null;
+    otpData.expiresAt = null;
+
+    otpData.resetTokenHash = resetTokenHash;
+    otpData.resetTokenExpiresAt = new Date(
+      Date.now() + 10 * 60 * 1000
+    );
+    otpData.resetTokenUsed = false;
+
+    await otpData.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Email verified successfully",
+      resetToken,
+    });
+
+  } catch (error) {
+    console.log("OTP Verification Error:", error);
+
+    return res.status(500).json({
       success: false,
+      message: "OTP verification failed",
     });
   }
 });
+
 
 app.post("/forget-password", async (req, res) => {
   try {
