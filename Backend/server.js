@@ -1266,7 +1266,7 @@ app.post("/forget-pass", async (req, res) => {
       });
     }
 
-    const verifyUser = await User.findOne({ email });
+    const verifyUser = await User1.findOne({ email });
 
     if (!verifyUser) {
       return res.send({
