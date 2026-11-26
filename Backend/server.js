@@ -1428,57 +1428,57 @@ app.post("/verifyemail-forget", async (req, res) => {
 });
 
 
-app.post("/forget-password", async (req, res) => {
-  try {
-    const { email, password } = req.body;
+// app.post("/forget-password", async (req, res) => {
+//   try {
+//     const { email, password } = req.body;
 
-    if (!email) {
-      return res.send({
-        message: "email is required",
-        success: false,
-      });
-    }
+//     if (!email) {
+//       return res.send({
+//         message: "email is required",
+//         success: false,
+//       });
+//     }
 
-    if (!password) {
-      return res.send({
-        message: "please enter password",
-        success: false,
-      });
-    }
+//     if (!password) {
+//       return res.send({
+//         message: "please enter password",
+//         success: false,
+//       });
+//     }
 
-    const otpData = await Otp.findOne({ email });
+//     const otpData = await Otp.findOne({ email });
 
-    if (!otpData || !otpData.verified) {
-      return res.send({
-        message: "please verify OTP first",
-        success: false,
-      });
-    }
+//     if (!otpData || !otpData.verified) {
+//       return res.send({
+//         message: "please verify OTP first",
+//         success: false,
+//       });
+//     }
 
-    const hashpassword = await bcrypt.hash(password, 9);
+//     const hashpassword = await bcrypt.hash(password, 9);
 
-    await User.updateOne(
-      { email },
-      {
-        $set: {
-          password: hashpassword,
-        },
-      },
-    );
+//     await User.updateOne(
+//       { email },
+//       {
+//         $set: {
+//           password: hashpassword,
+//         },
+//       },
+//     );
 
-    res.send({
-      message: "password is updated successfully",
-      success: true,
-    });
-  } catch (error) {
-    console.log(error);
+//     res.send({
+//       message: "password is updated successfully",
+//       success: true,
+//     });
+//   } catch (error) {
+//     console.log(error);
 
-    res.send({
-      message: "password not updated",
-      success: false,
-    });
-  }
-});
+//     res.send({
+//       message: "password not updated",
+//       success: false,
+//     });
+//   }
+// });
 
 app.post("/reset-password", async (req, res) => {
   try {
