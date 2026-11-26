@@ -1255,23 +1255,29 @@ app.get("/admin-profile", verifyToken, async (req, res) => {
   }
 });
 
+
 app.post("/forget-pass", async (req, res) => {
   try {
     const { email } = req.body;
 
     if (!email) {
-      return res.send({
-        status: false,
-        message: "email is required",
+      return res.status(400).json({
+        success: false,
+        message: "Email is required",
       });
     }
 
-    const verifyUser = await User1.findOne({ email });
+    const normalizedEmail = email.trim().toLowerCase();
+
+    // Search student in User1
+    const verifyUser = await User1.findOne({
+      email: normalizedEmail,
+    });
 
     if (!verifyUser) {
-      return res.send({
-        status: false,
-        message: "email does not exist",
+      return res.status(404).json({
+        success: false,
+        message: "Email does not exist",
       });
     }
 
@@ -1285,39 +1291,46 @@ app.post("/forget-pass", async (req, res) => {
     console.log("Generated OTP:", token);
 
     await Otp.findOneAndUpdate(
-      { email },
+      { email: normalizedEmail },
       {
-        email,
-        otp: token,
-        verified: false,
-        expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+        $set: {
+          email: normalizedEmail,
+          otp: token,
+          verified: false,
+          expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+          resetTokenHash: null,
+          resetTokenExpiresAt: null,
+          resetTokenUsed: false,
+        },
       },
       {
         upsert: true,
-        new: true,
-      },
+        returnDocument: "after",
+      }
     );
 
     await mailer.sendMail({
       from: process.env.EMAIL_USER,
-      to: email,
+      to: normalizedEmail,
       subject: "OTP Verification",
       text: `Your verification OTP is ${token}. This OTP is valid for 5 minutes.`,
     });
 
-    res.send({
-      message: "OTP sent successfully",
+    return res.status(200).json({
       success: true,
+      message: "OTP sent successfully",
     });
-  } catch (error) {
-    console.log(error);
 
-    res.send({
-      message: "OTP not sent",
+  } catch (error) {
+    console.error("FORGET PASSWORD ERROR:", error);
+
+    return res.status(500).json({
       success: false,
+      message: "OTP not sent",
     });
   }
 });
+
 
 
 app.post("/verifyemail-forget", async (req, res) => {
