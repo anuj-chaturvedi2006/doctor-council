@@ -1268,11 +1268,12 @@ app.post("/forget-pass", async (req, res) => {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
-
+console.log("STEP 1: API started"); 
     // Search student in User1
     const verifyUser = await User1.findOne({
       email: normalizedEmail,
     });
+    
 
     if (!verifyUser) {
       return res.status(404).json({
@@ -1289,7 +1290,7 @@ app.post("/forget-pass", async (req, res) => {
     });
 
     console.log("Generated OTP:", token);
-
+console.log("STEP 2: User found");
     await Otp.findOneAndUpdate(
       { email: normalizedEmail },
       {
@@ -1309,13 +1310,15 @@ app.post("/forget-pass", async (req, res) => {
       }
     );
 
+    console.log("STEP 3: OTP saved");
+
     await mailer.sendMail({
       from: process.env.EMAIL_USER,
       to: normalizedEmail,
       subject: "OTP Verification",
       text: `Your verification OTP is ${token}. This OTP is valid for 5 minutes.`,
     });
-
+console.log("STEP 4: Email sent");
     return res.status(200).json({
       success: true,
       message: "OTP sent successfully",
