@@ -1562,11 +1562,6 @@ app.post("/reset-password", async (req, res) => {
   }
 });
 
-
-//brao mailer
-
-const sendEmail = require("./utils/sendEmail");
-
 app.get("/test-brevo", async (req, res) => {
   try {
     const result = await sendEmail({
