@@ -33,6 +33,10 @@ const CounsellingSession = require("./models/CounsellingSession");
 const SessionFeedback = require("./models/SessionFeedback");
 const FollowUp = require("./models/FollowUp");
 
+const  Resend  = require("resend");
+
+const resend = new Resend(process.env.RESEND_API_KEY);
+
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -1268,7 +1272,7 @@ app.post("/forget-pass", async (req, res) => {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
-console.log("STEP 1: API started"); 
+   console.log("STEP 1: API started"); 
     // Search student in User1
     const verifyUser = await User1.findOne({
       email: normalizedEmail,
@@ -1312,13 +1316,24 @@ console.log("STEP 2: User found");
 
     console.log("STEP 3: OTP saved");
 
-    await mailer.sendMail({
-      from: process.env.EMAIL_USER,
-      to: normalizedEmail,
-      subject: "OTP Verification",
-      text: `Your verification OTP is ${token}. This OTP is valid for 5 minutes.`,
-    });
-console.log("STEP 4: Email sent");
+ const { data, error } = await resend.emails.send({
+  from: "Doctor Council <onboarding@resend.dev>",
+  to: [normalizedEmail],
+  subject: "OTP Verification",
+  text: `Your verification OTP is ${token}. This OTP is valid for 5 minutes.`,
+});
+
+if (error) {
+  console.log("Resend Email Error:", error);
+
+  return res.status(500).json({
+    success: false,
+    message: "OTP email could not be sent",
+  });
+}
+
+console.log("STEP 4: Email sent", data);
+
     return res.status(200).json({
       success: true,
       message: "OTP sent successfully",
@@ -2453,8 +2468,7 @@ app.post("/admin-delete",
 
 
 
-app.post(
-  "/add-college",
+app.post("/add-college",
   verifyToken,
   requirePermission("colleges", "create"),
   collegeUpload.fields([
