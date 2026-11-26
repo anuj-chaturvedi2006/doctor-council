@@ -1260,10 +1260,12 @@ app.get("/admin-profile", verifyToken, async (req, res) => {
 });
 
 
+
 app.post("/forget-pass", async (req, res) => {
   try {
     const { email } = req.body;
 
+    // 1. Validate email
     if (!email) {
       return res.status(400).json({
         success: false,
@@ -1272,12 +1274,13 @@ app.post("/forget-pass", async (req, res) => {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
-   console.log("STEP 1: API started"); 
-    // Search student in User1
+
+    console.log("STEP 1: Forget password API started");
+
+    // 2. Find student in User1
     const verifyUser = await User1.findOne({
       email: normalizedEmail,
     });
-    
 
     if (!verifyUser) {
       return res.status(404).json({
@@ -1286,6 +1289,9 @@ app.post("/forget-pass", async (req, res) => {
       });
     }
 
+    console.log("STEP 2: User found");
+
+    // 3. Generate OTP
     const token = otpgenerator.generate(4, {
       digits: true,
       lowerCaseAlphabets: false,
@@ -1293,8 +1299,7 @@ app.post("/forget-pass", async (req, res) => {
       specialChars: false,
     });
 
-    console.log("Generated OTP:", token);
-   console.log("STEP 2: User found");
+    // 4. Save OTP in MongoDB
     await Otp.findOneAndUpdate(
       { email: normalizedEmail },
       {
@@ -1314,36 +1319,44 @@ app.post("/forget-pass", async (req, res) => {
       }
     );
 
-    console.log("STEP 3: OTP saved");
+    console.log("STEP 3: OTP saved successfully");
 
- const emailResponse = await sendEmail({
-  to: normalizedEmail,
-  subject: "Doctor Council - OTP Verification",
+    // 5. Send OTP using Brevo API
+    const emailResponse = await sendEmail({
+      to: normalizedEmail,
 
-  html: `
-    <div style="font-family: Arial; padding: 20px;">
-      <h2>Doctor Council</h2>
-      <h3>Password Reset OTP</h3>
+      subject: "Doctor Council - OTP Verification",
 
-      <p>Your verification OTP is:</p>
+      html: `
+        <div style="font-family: Arial, sans-serif; padding: 20px;">
+          <h2 style="color: #2563eb;">Doctor Council</h2>
 
-      <h1 style="color: #2563eb; letter-spacing: 5px;">
-        ${token}
-      </h1>
+          <h3>Password Reset OTP</h3>
 
-      <p>This OTP is valid for 5 minutes.</p>
+          <p>Your verification OTP is:</p>
 
-      <p>Please do not share your OTP with anyone.</p>
-    </div>
-  `,
+          <h1 style="color: #2563eb; letter-spacing: 5px;">
+            ${token}
+          </h1>
 
-  text: `Your verification OTP is ${token}. This OTP is valid for 5 minutes.`,
-});
+          <p>This OTP is valid for 5 minutes.</p>
 
-console.log("STEP 4: Brevo Email sent", emailResponse);
+          <p>Please do not share your OTP with anyone.</p>
 
-console.log("STEP 4: Email sent", data);
+          <hr />
 
+          <p style="color: #777;">
+            If you did not request this OTP, please ignore this email.
+          </p>
+        </div>
+      `,
+
+      text: `Your verification OTP is ${token}. This OTP is valid for 5 minutes.`,
+    });
+
+    console.log("STEP 4: Brevo Email sent successfully", emailResponse);
+
+    // 6. Success response
     return res.status(200).json({
       success: true,
       message: "OTP sent successfully",
@@ -1355,9 +1368,11 @@ console.log("STEP 4: Email sent", data);
     return res.status(500).json({
       success: false,
       message: "OTP not sent",
+      error: error.message,
     });
   }
 });
+
 
 
 
