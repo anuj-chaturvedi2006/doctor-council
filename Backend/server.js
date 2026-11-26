@@ -1326,7 +1326,7 @@ console.log("STEP 2: User found");
 if (error) {
   console.log("Resend Email Error:", error);
 
-  return res.status(500).json({
+  return res.status(500).json({ 
     success: false,
     message: "OTP email could not be sent",
   });
