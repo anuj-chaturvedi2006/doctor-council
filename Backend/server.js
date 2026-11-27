@@ -3,9 +3,6 @@ const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const bcrypt = require("bcrypt");
-
-// const nodemailer = require("nodemailer");
-
 const otpgenerator = require("otp-generator");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
@@ -35,7 +32,6 @@ const CounsellingSession = require("./models/CounsellingSession");
 const SessionFeedback = require("./models/SessionFeedback");
 const FollowUp = require("./models/FollowUp");
 const sendEmail = require("./utils/sendEmail");
-
 
 app.use(cors());
 app.use(express.json());
@@ -72,17 +68,6 @@ app.use("/uploads",
   express.static(path.join(__dirname, "uploads"))
 );
 
-
-
-// ================= MAILER =================
-
-// const mailer = nodemailer.createTransport({
-//   service: "gmail",
-//   auth: {
-//     user: process.env.EMAIL_USER,
-//     pass: process.env.EMAIL_PASS,
-//   },
-// });
 
 // ================= MONGODB =================
 const api=process.env.MONGODB_URI
@@ -1190,9 +1175,6 @@ app.post("/admin-login", async (req, res) => {
         message: "Invalid email or password",
       });
     }
-    // console.log("Login email:", user.email);
-    // console.log("Login user ID:", user._id.toString());
-    // console.log("Login role:", user.role.roleName);
     const token = jwt.sign(
       { userId: user._id.toString() },
       process.env.JWT_SECRET,
@@ -1292,7 +1274,7 @@ app.post("/forget-pass", async (req, res) => {
     console.log("STEP 2: User found");
 
     // 3. Generate OTP
-    const token = otpgenerator.generate(4, {
+    const token = otpgenerator.generate(6, {
       digits: true,
       lowerCaseAlphabets: false,
       upperCaseAlphabets: false,

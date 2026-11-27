@@ -12,7 +12,7 @@ export default function VerifyOtpPage() {
 
   const email = searchParams.get("email") || "";
 
-  const [otp, setOtp] = useState(["", "", "", ""]);
+const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
   const [timer, setTimer] = useState(60);
@@ -37,9 +37,9 @@ export default function VerifyOtpPage() {
 
     setOtp(newOtp);
 
-    if (value && index < 3) {
-      inputRefs.current[index + 1]?.focus();
-    }
+ if (value && index < 5) {
+  inputRefs.current[index + 1]?.focus();
+}
   };
 
   const handleKeyDown = (
@@ -54,9 +54,9 @@ export default function VerifyOtpPage() {
       inputRefs.current[index - 1]?.focus();
     }
 
-    if (e.key === "ArrowRight" && index < 3) {
-      inputRefs.current[index + 1]?.focus();
-    }
+  if (e.key === "ArrowRight" && index < 5) {
+  inputRefs.current[index + 1]?.focus();
+}
   };
 
   const handlePaste = (
@@ -65,22 +65,22 @@ export default function VerifyOtpPage() {
     e.preventDefault();
 
     const pastedOtp = e.clipboardData
-      .getData("text")
-      .replace(/\D/g, "")
-      .slice(0, 4);
+  .getData("text")
+  .replace(/\D/g, "")
+  .slice(0, 6);
 
-    if (!pastedOtp) return;
+if (!pastedOtp) return;
 
-    setOtp([
-      pastedOtp[0] || "",
-      pastedOtp[1] || "",
-      pastedOtp[2] || "",
-      pastedOtp[3] || "",
-    ]);
+setOtp([
+  pastedOtp[0] || "",
+  pastedOtp[1] || "",
+  pastedOtp[2] || "",
+  pastedOtp[3] || "",
+  pastedOtp[4] || "",
+  pastedOtp[5] || "",
+]);
 
-    inputRefs.current[
-      Math.min(pastedOtp.length, 3)
-    ]?.focus();
+inputRefs.current[Math.min(pastedOtp.length, 5)]?.focus();
   };
 
   const handleVerify = async (
@@ -90,10 +90,10 @@ export default function VerifyOtpPage() {
 
     const enteredOtp = otp.join("");
 
-    if (enteredOtp.length !== 4) {
-      toast.error("Please enter complete 4-digit OTP.");
-      return;
-    }
+    if (enteredOtp.length !== 6) {
+  toast.error("Please enter complete 6-digit OTP.");
+  return;
+}
 
     if (!email) {
       toast.error("Email not found. Please try again.");
@@ -172,7 +172,7 @@ export default function VerifyOtpPage() {
         throw new Error(data.message || "OTP resend failed");
       }
 
-      setOtp(["", "", "", ""]);
+      setOtp(["", "", "", "", "", ""]);
       setTimer(60);
       inputRefs.current[0]?.focus();
 
