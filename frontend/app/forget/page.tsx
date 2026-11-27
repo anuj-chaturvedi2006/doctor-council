@@ -7,6 +7,7 @@ import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
 export default function ForgetPasswordPage() {
+  const API="https://your-backend.onrender.com"
   const router = useRouter();
 
   const [email, setEmail] = useState("");
@@ -26,7 +27,7 @@ const handleSubmit = async (
     setLoading(true);
 
     const response = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL}/forget-pass`,
+      `${API}/forget-pass`,
       {
         method: "POST",
         headers: {
