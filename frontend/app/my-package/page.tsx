@@ -48,7 +48,7 @@ interface OrderData {
 
 // ================= CONFIG =================
 
-const API_URL ="https://doctor-council.onrender.com";
+const API = process.env.NEXT_PUBLIC_API_URL || "https://doctor-council.onrender.com";
 
 const getErrorMessage = (
   err: unknown,
@@ -105,7 +105,7 @@ const MyPackagePage = () => {
 
       const response = await axios.get<
         ApiResponse<StudentPackage | StudentPackage[]>
-      >(`${API_URL}/student/my-package`, {
+      >(`${API}/student/my-package`, {
         headers: {
           Authorization: `Bearer ${authToken}`,
         },
@@ -195,7 +195,7 @@ const MyPackagePage = () => {
       const orderResponse = await axios.post<
         ApiResponse<OrderData>
       >(
-        `${API_URL}/student/retry-package-order`,
+        `${API}/student/retry-package-order`,
         {
           studentPackageId: item._id,
         },
@@ -230,7 +230,7 @@ const MyPackagePage = () => {
             const verifyResponse = await axios.post<
               ApiResponse<unknown>
             >(
-              `${API_URL}/verify-payment`,
+              `${API}/verify-payment`,
               {
                 razorpay_order_id:
                   razorpayResponse.razorpay_order_id,

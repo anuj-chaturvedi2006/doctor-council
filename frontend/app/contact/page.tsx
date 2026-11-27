@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 
 export default function InquiryForm() {
+  const API=process.env.NEXT_PUBLIC_API_URL
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -51,7 +52,7 @@ export default function InquiryForm() {
       setLoading(true);
 
       const res = await axios.post(
-        "https://doctor-council.onrender.com/contact",
+        `${API}/contact`,
         formData
       );
 

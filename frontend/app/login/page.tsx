@@ -56,13 +56,13 @@ export default function StudentLoginPage() {
     try {
       setLoading(true);
 
-      const apiUrl = "https://doctor-council.onrender.com";
+      const API =process.env.NEXT_PUBLIC_API_URL ||  "https://doctor-council.onrender.com";
 
-      if (!apiUrl) {
+      if (!API) {
         throw new Error("API URL is not configured.");
       }
 
-      const response = await fetch(`${apiUrl}/admin-login`, {
+      const response = await fetch(`${API}/admin-login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

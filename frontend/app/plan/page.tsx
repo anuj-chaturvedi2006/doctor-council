@@ -6,7 +6,7 @@ import axios from "axios";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
-const API_URL = "https://doctor-council.onrender.com";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://doctor-council.onrender.com";
 
 // ================= TYPES =================
 
