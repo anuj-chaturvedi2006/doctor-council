@@ -12,29 +12,58 @@ export default function ForgetPasswordPage() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (
-    e: React.FormEvent<HTMLFormElement>
-  ) => {
-    e.preventDefault();
+const handleSubmit = async (
+  e: React.FormEvent<HTMLFormElement>
+) => {
+  e.preventDefault();
 
-    if (!email.trim()) {
-      toast.error("Please enter your registered email.");
-      return;
+  if (!email.trim()) {
+    toast.error("Please enter your registered email.");
+    return;
+  }
+
+  try {
+    setLoading(true);
+
+    const response = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL}/forget-pass`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+        }),
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+      throw new Error(data.message || "Unable to send OTP.");
     }
 
-    try {
-      setLoading(true);
+    toast.success("OTP sent successfully!");
 
-      // Backend API integration abhi pending hai.
-      // Pehle UI ready kar rahe hain.
+    setTimeout(() => {
+      router.push(
+        `/verify-otp?email=${encodeURIComponent(
+          email.trim().toLowerCase()
+        )}`
+      );
+    }, 1000);
 
-      toast.info("Forgot password API integration is pending.");
-    } catch (error) {
-      toast.error("Something went wrong. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
+  } catch (error) {
+    toast.error(
+      error instanceof Error
+        ? error.message
+        : "Something went wrong. Please try again."
+    );
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-100 via-white to-blue-100 px-4 py-10">
