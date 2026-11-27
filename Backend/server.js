@@ -1453,57 +1453,111 @@ app.post("/verifyemail-forget", async (req, res) => {
 });
 
 
-// app.post("/forget-password", async (req, res) => {
-//   try {
-//     const { email, password } = req.body;
+app.post("/forget-password", async (req, res) => {
+  try {
+    const { email, password, resetToken } = req.body;
 
-//     if (!email) {
-//       return res.send({
-//         message: "email is required",
-//         success: false,
-//       });
-//     }
+    // 1. Validate fields
+    if (!email || !password || !resetToken) {
+      return res.status(400).json({
+        success: false,
+        message: "Email, password and reset token are required",
+      });
+    }
 
-//     if (!password) {
-//       return res.send({
-//         message: "please enter password",
-//         success: false,
-//       });
-//     }
+    if (password.length < 8) {
+      return res.status(400).json({
+        success: false,
+        message: "Password must be at least 8 characters",
+      });
+    }
 
-//     const otpData = await Otp.findOne({ email });
+    const normalizedEmail = email.trim().toLowerCase();
 
-//     if (!otpData || !otpData.verified) {
-//       return res.send({
-//         message: "please verify OTP first",
-//         success: false,
-//       });
-//     }
+    // 2. Find OTP record
+    const otpData = await Otp.findOne({
+      email: normalizedEmail,
+      verified: true,
+      resetTokenUsed: false,
+    });
 
-//     const hashpassword = await bcrypt.hash(password, 9);
+    if (!otpData || !otpData.resetTokenHash) {
+      return res.status(400).json({
+        success: false,
+        message: "Please verify OTP first",
+      });
+    }
 
-//     await User.updateOne(
-//       { email },
-//       {
-//         $set: {
-//           password: hashpassword,
-//         },
-//       },
-//     );
+    // 3. Check token expiry
+    if (
+      !otpData.resetTokenExpiresAt ||
+      otpData.resetTokenExpiresAt < new Date()
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Reset token expired. Please verify OTP again",
+      });
+    }
 
-//     res.send({
-//       message: "password is updated successfully",
-//       success: true,
-//     });
-//   } catch (error) {
-//     console.log(error);
+    // 4. Hash received reset token
+    const receivedTokenHash = crypto
+      .createHash("sha256")
+      .update(resetToken)
+      .digest("hex");
 
-//     res.send({
-//       message: "password not updated",
-//       success: false,
-//     });
-//   }
-// });
+    // 5. Verify reset token
+    if (receivedTokenHash !== otpData.resetTokenHash) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid reset token",
+      });
+    }
+
+    // 6. Hash new password
+    const hashpassword = await bcrypt.hash(password, 9);
+
+    // 7. Update student password
+    const updatedUser = await User1.findOneAndUpdate(
+      { email: normalizedEmail },
+      {
+        $set: {
+          password: hashpassword,
+        },
+      },
+      { new: true }
+    );
+
+    if (!updatedUser) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // 8. Consume reset token
+    otpData.resetTokenUsed = true;
+    otpData.resetTokenHash = null;
+    otpData.resetTokenExpiresAt = null;
+    otpData.verified = false;
+
+    await otpData.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Password updated successfully",
+    });
+
+  } catch (error) {
+    console.error("FORGET PASSWORD ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Password not updated",
+    });
+  }
+});
+
+
 
 app.post("/reset-password", async (req, res) => {
   try {
@@ -1562,26 +1616,6 @@ app.post("/reset-password", async (req, res) => {
   }
 });
 
-app.get("/test-brevo", async (req, res) => {
-  try {
-    const result = await sendEmail({
-      to: "your-email@gmail.com",
-      subject: "Brevo API Test",
-      html: "<h2>Congratulations!</h2><p>Brevo API is working successfully.</p>",
-    });
-
-    res.json({
-      success: true,
-      message: "Email sent successfully",
-      data: result,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-});
 
 
 
