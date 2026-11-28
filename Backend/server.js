@@ -1209,37 +1209,37 @@ app.post("/admin-login", async (req, res) => {
   }
 });
 
-// app.get("/admin-profile", verifyToken, async (req, res) => {
-//   try {
-//     const user = await User1.findById(req.userId)
-//       .select("-password")
-//       .populate("role");
+app.get("/admin-profile", verifyToken, async (req, res) => {
+  try {
+    const user = await User1.findById(req.userId)
+      .select("-password")
+      .populate("role");
 
-//     if (!user || user.status !== "active") {
-//       return res.status(401).json({
-//         success: false,
-//         message: "User not found or inactive",
-//       });
-//     }
+    if (!user || user.status !== "active") {
+      return res.status(401).json({
+        success: false,
+        message: "User not found or inactive",
+      });
+    }
 
-//     if (!user.role || user.role.status !== "active") {
-//       return res.status(403).json({
-//         success: false,
-//         message: "Role is inactive",
-//       });
-//     }
+    if (!user.role || user.role.status !== "active") {
+      return res.status(403).json({
+        success: false,
+        message: "Role is inactive",
+      });
+    }
 
-//     return res.json({
-//       success: true,
-//       user,
-//     });
-//   } catch (error) {
-//     return res.status(500).json({
-//       success: false,
-//       message: "Internal server error",
-//     });
-//   }
-// });
+    return res.json({
+      success: true,
+      user,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+});
 
 
 
