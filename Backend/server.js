@@ -1312,7 +1312,7 @@ app.post("/student-register", async (req, res) => {
     }
 
     // 5. Generate 6 digit OTP
-    const otp = otpGenerator.generate(6, {
+    const otp = otpgenerator.generate(6, {
       digits: true,
       lowerCaseAlphabets: false,
       upperCaseAlphabets: false,
