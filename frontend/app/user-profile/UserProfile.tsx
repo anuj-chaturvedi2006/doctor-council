@@ -1084,7 +1084,7 @@ let preferredDate: string | null = null;
   const handleLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
-    router.replace("/student-login");
+    router.replace("/login");
   };
   const cancelPersonal = () => {
     setPersonalForm({
