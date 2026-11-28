@@ -58,7 +58,7 @@ export default function Header() {
     setUser(null);
     setDropdownOpen(false);
 
-    router.replace("/student-login");
+    router.replace("/login");
   };
 
   const handleViewProfile = () => {
@@ -257,7 +257,7 @@ export default function Header() {
 
               {!user ? (
                 <Link
-                  href="/student-login"
+                  href="/login"
                   onClick={() => setMobileMenuOpen(false)}
                   className="flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-5 py-3 font-bold text-white"
                 >
