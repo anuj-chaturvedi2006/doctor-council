@@ -1385,6 +1385,118 @@ app.post("/student-register", async (req, res) => {
   }
 });
 
+app.post("/verify-student-register-otp", async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      return res.status(400).json({
+        status: false,
+        message: "Email and OTP are required",
+      });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+
+    // 1. Find registration OTP
+    const otpData = await StudentRegistrationOtp.findOne({
+      email: normalizedEmail,
+    });
+
+    if (!otpData) {
+      return res.status(404).json({
+        status: false,
+        message: "Registration OTP not found. Please register again.",
+      });
+    }
+
+    // 2. Check OTP expiry
+    if (otpData.expiresAt < new Date()) {
+      await StudentRegistrationOtp.deleteOne({
+        email: normalizedEmail,
+      });
+
+      return res.status(400).json({
+        status: false,
+        message: "OTP expired. Please register again.",
+      });
+    }
+
+    // 3. Verify OTP
+    if (String(otpData.otp) !== String(otp).trim()) {
+      return res.status(400).json({
+        status: false,
+        message: "Invalid OTP",
+      });
+    }
+
+    // 4. Check existing user again
+    const existingUser = await User1.findOne({
+      $or: [
+        { email: normalizedEmail },
+        { phone: otpData.registrationData.phone },
+      ],
+    });
+
+    if (existingUser) {
+      return res.status(409).json({
+        status: false,
+        message: "Email or phone number is already registered",
+      });
+    }
+
+    // 5. Find active Student role
+    const studentRole = await Role.findOne({
+      roleName: { $regex: /^student$/i },
+      status: "active",
+    });
+
+    if (!studentRole) {
+      return res.status(404).json({
+        status: false,
+        message: "Student role not found",
+      });
+    }
+
+    // 6. Create student account
+    const student = await User1.create({
+      name: otpData.registrationData.name,
+      email: normalizedEmail,
+      phone: otpData.registrationData.phone,
+      password: otpData.registrationData.password,
+      role: studentRole._id,
+      isEmailVerified: true,
+      isPhoneVerified: false,
+      status: "active",
+    });
+
+    // 7. Delete temporary OTP record
+    await StudentRegistrationOtp.deleteOne({
+      email: normalizedEmail,
+    });
+
+    return res.status(201).json({
+      status: true,
+      message: "Email verified and student account created successfully",
+      data: {
+        _id: student._id,
+        name: student.name,
+        email: student.email,
+        phone: student.phone,
+        isEmailVerified: student.isEmailVerified,
+      },
+    });
+
+  } catch (error) {
+    console.error("Student OTP Verification Error:", error);
+
+    return res.status(500).json({
+      status: false,
+      message: "Student OTP verification failed",
+    });
+  }
+});
+
 
 app.post("/send-verify-otp", async (req, res) => {
   try {
