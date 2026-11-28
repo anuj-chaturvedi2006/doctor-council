@@ -96,6 +96,11 @@ export default function StudentLoginPage() {
       localStorage.setItem("user", JSON.stringify(data.user));
 
       toast.success("Welcome! Login successful.");
+       if(data.success==true) 
+       {
+        setForm({email:"",password:""})
+       }
+      
 
       router.replace("/home");
 

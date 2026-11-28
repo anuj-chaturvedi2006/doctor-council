@@ -582,7 +582,7 @@ export default function UserProfile() {
     const currentToken =
       typeof window !== "undefined" ? localStorage.getItem("token") : null;
     if (!currentToken) {
-      router.replace("/student-login");
+      router.replace("/login");
       return;
     }
     try {
@@ -1085,6 +1085,7 @@ let preferredDate: string | null = null;
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     router.replace("/login");
+
   };
   const cancelPersonal = () => {
     setPersonalForm({
