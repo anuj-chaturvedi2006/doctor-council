@@ -27,7 +27,7 @@ const handleSubmit = async (
     setLoading(true);
 
     const response = await fetch(
-      `${API}/forget-pass`,
+      `${API}/send-verify-otp`,
       {
         method: "POST",
         headers: {

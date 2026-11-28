@@ -104,7 +104,7 @@ inputRefs.current[Math.min(pastedOtp.length, 5)]?.focus();
       setLoading(true);
 
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/verifyemail-forget`,
+        `${process.env.NEXT_PUBLIC_API_URL}/verifyemail`,
         {
           method: "POST",
           headers: {

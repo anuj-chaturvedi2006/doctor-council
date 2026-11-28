@@ -1243,7 +1243,7 @@ app.get("/admin-profile", verifyToken, async (req, res) => {
 
 
 
-app.post("/forget-pass", async (req, res) => {
+app.post("/send-verify-otp", async (req, res) => {
   try {
     const { email } = req.body;
 
@@ -1358,7 +1358,7 @@ app.post("/forget-pass", async (req, res) => {
 
 
 
-app.post("/verifyemail-forget", async (req, res) => {
+app.post("/verifyemail", async (req, res) => {
   try {
     const { email, otp } = req.body;
 

@@ -68,7 +68,7 @@ const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     console.log("FORM SUBMITTED");
     setLoading(true);
 
-    const apiUrl = "https://doctor-council.onrender.com";
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://doctor-council.onrender.com";
     console.log("API URL:", apiUrl);
 
     if (!apiUrl) {
