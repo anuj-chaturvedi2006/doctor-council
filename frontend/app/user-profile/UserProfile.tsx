@@ -460,7 +460,7 @@ const getOptionName = (option: StreamOption | CourseOption): string => {
 
 export default function UserProfile() {
 
-  const apiUrl = API_FALLBACK || "https://doctor-council.onrender.com";
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://doctor-council.onrender.com";
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = useState<Tab>("profile");
