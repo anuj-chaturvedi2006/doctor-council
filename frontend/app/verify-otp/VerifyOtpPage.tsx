@@ -120,7 +120,7 @@ inputRefs.current[Math.min(pastedOtp.length, 5)]?.focus();
       const data = await response.json();
 
       if (!response.ok || !data.success) {
-        setOtp(["", "", "", ""]);
+       setOtp(["", "", "", "", "", ""]);
         inputRefs.current[0]?.focus();
 
         throw new Error(data.message || "OTP verification failed");
@@ -336,8 +336,8 @@ inputRefs.current[Math.min(pastedOtp.length, 5)]?.focus();
             </h2>
 
             <p className="mt-4 text-sm leading-7 text-slate-500">
-              We've sent a 4-digit verification code to your
-              registered email address.
+              We've sent a 6-digit verification code to your
+registered email address.
             </p>
 
             <div className="mt-4 inline-flex max-w-full items-center gap-2 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
@@ -393,7 +393,7 @@ inputRefs.current[Math.min(pastedOtp.length, 5)]?.focus();
               </div>
 
               <p className="mt-3 text-xs text-slate-400">
-                Enter the 4-digit code received in your email.
+                Enter the 6-digit code received in your email.
               </p>
 
             </div>
