@@ -32,7 +32,7 @@ const CounsellingSession = require("./models/CounsellingSession");
 const SessionFeedback = require("./models/SessionFeedback");
 const FollowUp = require("./models/FollowUp");
 const sendEmail = require("./utils/sendEmail");
-
+const StudentRegistrationOtp = require("./models/StudentRegistrationOtp");
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -1209,38 +1209,181 @@ app.post("/admin-login", async (req, res) => {
   }
 });
 
-app.get("/admin-profile", verifyToken, async (req, res) => {
+// app.get("/admin-profile", verifyToken, async (req, res) => {
+//   try {
+//     const user = await User1.findById(req.userId)
+//       .select("-password")
+//       .populate("role");
+
+//     if (!user || user.status !== "active") {
+//       return res.status(401).json({
+//         success: false,
+//         message: "User not found or inactive",
+//       });
+//     }
+
+//     if (!user.role || user.role.status !== "active") {
+//       return res.status(403).json({
+//         success: false,
+//         message: "Role is inactive",
+//       });
+//     }
+
+//     return res.json({
+//       success: true,
+//       user,
+//     });
+//   } catch (error) {
+//     return res.status(500).json({
+//       success: false,
+//       message: "Internal server error",
+//     });
+//   }
+// });
+
+
+
+app.post("/student-register", async (req, res) => {
   try {
-    const user = await User1.findById(req.userId)
-      .select("-password")
-      .populate("role");
+    const { name, email, phone, password } = req.body;
 
-    if (!user || user.status !== "active") {
-      return res.status(401).json({
-        success: false,
-        message: "User not found or inactive",
+    // 1. Required fields validation
+    if (!name || !email || !phone || !password) {
+      return res.status(400).json({
+        status: false,
+        message: "All fields are required",
       });
     }
 
-    if (!user.role || user.role.status !== "active") {
-      return res.status(403).json({
-        success: false,
-        message: "Role is inactive",
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedPhone = phone.trim();
+
+    // 2. Validate email and phone
+    if (!/^\S+@\S+\.\S+$/.test(normalizedEmail)) {
+      return res.status(400).json({
+        status: false,
+        message: "Invalid email address",
       });
     }
 
-    return res.json({
-      success: true,
-      user,
+    if (!/^[0-9]{10}$/.test(normalizedPhone)) {
+      return res.status(400).json({
+        status: false,
+        message: "Enter a valid 10-digit phone number",
+      });
+    }
+
+    if (password.length < 8) {
+      return res.status(400).json({
+        status: false,
+        message: "Password must be at least 8 characters",
+      });
+    }
+
+    // 3. Check existing student
+    const existingUser = await User1.findOne({
+      $or: [
+        { email: normalizedEmail },
+        { phone: normalizedPhone },
+      ],
     });
+
+    if (existingUser) {
+      return res.status(409).json({
+        status: false,
+        message:
+          existingUser.email === normalizedEmail
+            ? "Email already registered"
+            : "Phone number already registered",
+      });
+    }
+
+    // 4. Find Student role
+    const studentRole = await Role.findOne({
+      roleName: { $regex: /^student$/i },
+      status: "active",
+    });
+
+    if (!studentRole) {
+      return res.status(404).json({
+        status: false,
+        message: "Student role not found or inactive",
+      });
+    }
+
+    // 5. Generate 6 digit OTP
+    const otp = otpGenerator.generate(6, {
+      digits: true,
+      lowerCaseAlphabets: false,
+      upperCaseAlphabets: false,
+      specialChars: false,
+    });
+
+    // 6. Hash password before temporary storage
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // 7. Save or update temporary registration
+    await StudentRegistrationOtp.findOneAndUpdate(
+      { email: normalizedEmail },
+      {
+        $set: {
+          otp,
+          registrationData: {
+            name: name.trim(),
+            phone: normalizedPhone,
+            password: hashedPassword,
+          },
+          expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+        },
+      },
+      {
+        upsert: true,
+        new: true,
+        runValidators: true,
+        setDefaultsOnInsert: true,
+      }
+    );
+
+    // 8. Send OTP email
+    try {
+      await sendEmail({
+        to: normalizedEmail,
+        subject: "MediPath Student Registration OTP",
+        html: `
+          <div style="font-family: Arial, sans-serif; padding: 20px;">
+            <h2>Welcome to MediPath!</h2>
+            <p>Your student registration verification OTP is:</p>
+            <h1 style="letter-spacing: 8px; color: #0d9488;">
+              ${otp}
+            </h1>
+            <p>This OTP is valid for 5 minutes.</p>
+            <p>If you did not request this OTP, please ignore this email.</p>
+          </div>
+        `,
+      });
+    } catch (emailError) {
+      await StudentRegistrationOtp.deleteOne({
+        email: normalizedEmail,
+      });
+
+      throw emailError;
+    }
+
+    return res.status(200).json({
+      status: true,
+      message: "OTP sent successfully. Please verify your email.",
+      email: normalizedEmail,
+    });
+
   } catch (error) {
+    console.error("Student Registration Error:", error);
+
     return res.status(500).json({
-      success: false,
-      message: "Internal server error",
+      status: false,
+      message: "Student registration OTP could not be sent",
     });
   }
 });
-
 
 
 app.post("/send-verify-otp", async (req, res) => {
